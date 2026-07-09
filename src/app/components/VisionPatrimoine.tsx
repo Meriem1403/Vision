@@ -39,8 +39,8 @@ function PropertyMobileCard({ line, onSelect }: { line: { p: Property; crdRef: n
   return (
     <button type="button" onClick={onSelect} className="w-full text-left p-4 rounded-xl vision-surface border border-[var(--v-border-subtle)] hover:vision-surface transition-colors active:scale-[0.99]">
       <p className="text-sm font-semibold vision-text break-words">{p.address}</p>
-      <p className="text-[10px] vision-text-muted mt-0.5">{p.type} · {p.lots} lot{p.lots > 1 ? "s" : ""}</p>
-      <div className="grid grid-cols-2 gap-2 mt-3 text-[10px] sm:text-xs">
+      <p className="text-xs vision-text-muted mt-0.5">{p.type} · {p.lots} lot{p.lots > 1 ? "s" : ""}</p>
+      <div className="grid grid-cols-2 gap-2 mt-3 text-xs sm:text-sm">
         <div><span className="vision-text-muted">CRD projeté</span><p className="font-mono font-semibold vision-negative-text mt-0.5">{crdProj > 0 ? fmt(crdProj) : "—"}</p></div>
         <div><span className="vision-text-muted">Cash/mois</span><p className="font-mono font-semibold mt-0.5" style={{ color: cash >= 0 ? "#34d399" : "#f87171" }}>{cash >= 0 ? "+" : ""}{fmt(cash)}</p></div>
         <div><span className="vision-text-muted">Loyer</span><p className="font-mono vision-text mt-0.5">{p.loyer > 0 ? fmt(p.loyer) : "—"}</p></div>
@@ -87,7 +87,7 @@ function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properti
         <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-end lg:justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-sm sm:text-base font-bold vision-text break-words">{sci.name}</p>
-            <p className="text-[10px] sm:text-xs vision-text-muted mt-0.5">{sci.type} · {properties.length} bien{properties.length > 1 ? "s" : ""}</p>
+            <p className="text-xs sm:text-sm vision-text-muted mt-0.5">{sci.type} · {properties.length} bien{properties.length > 1 ? "s" : ""}</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 w-full lg:w-auto lg:min-w-[320px] xl:min-w-[380px]">
             <GSelect
@@ -109,10 +109,10 @@ function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properti
           </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-4">
-          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-[9px] sm:text-[10px] vision-text-muted">Part crédit ({Math.round(ratio * 100)}%)</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmt(partCredit)}</p></div>
-          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-[9px] sm:text-[10px] vision-text-muted">Mensualités part</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmtD(partMensualites)}</p></div>
-          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-[9px] sm:text-[10px] vision-text-muted">Cash mensuel total</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5" style={{ color: totals.cash >= 0 ? "#34d399" : "#f87171" }}>{totals.cash >= 0 ? "+" : ""}{fmt(totals.cash)}</p></div>
-          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-[9px] sm:text-[10px] vision-text-muted">CRD projeté</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 vision-negative-text break-all">{fmt(totals.crdProj)}</p></div>
+          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Part crédit ({Math.round(ratio * 100)}%)</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmt(partCredit)}</p></div>
+          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Mensualités part</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmtD(partMensualites)}</p></div>
+          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Cash mensuel total</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5" style={{ color: totals.cash >= 0 ? "#34d399" : "#f87171" }}>{totals.cash >= 0 ? "+" : ""}{fmt(totals.cash)}</p></div>
+          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">CRD projeté</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 vision-negative-text break-all">{fmt(totals.crdProj)}</p></div>
         </div>
       </div>
 
@@ -122,7 +122,7 @@ function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properti
         ))}
         <div className="p-4 rounded-xl vision-surface border border-[var(--v-glass-border)]">
           <p className="text-xs font-bold vision-text mb-2">TOTAL {sci.shortName}</p>
-          <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
             <div><span className="vision-text-muted">CRD projeté</span><p className="font-mono vision-negative-text font-bold">{fmt(totals.crdProj)}</p></div>
             <div><span className="vision-text-muted">Cash/mois</span><p className="font-mono font-bold" style={{ color: totals.cash >= 0 ? "#34d399" : "#f87171" }}>{fmt(totals.cash)}</p></div>
           </div>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { buildAmortizationSchedule, computeLoanSummary, type LoanInput } from "@/lib/loanCalculator";
-import { G, lbl } from "./layout";
+import { MetricCard } from "./MetricWithFormula";
+import { lbl } from "./layout";
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 const fmtD = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
@@ -35,15 +36,6 @@ export interface PropertyShape {
   credit?: CreditShape;
 }
 
-function Metric({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="vision-surface backdrop-blur-xl border border-[var(--v-glass-border)] rounded-2xl p-3 sm:p-4 min-w-0">
-      <p className={lbl}>{label}</p>
-      <p className="text-sm sm:text-base font-bold font-mono break-words" style={{ color: color ?? "rgba(255,255,255,0.9)" }}>{value}</p>
-    </div>
-  );
-}
-
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return <div className="vision-surface backdrop-blur-xl border border-[var(--v-glass-border)] rounded-2xl p-4 sm:p-5 w-full min-w-0"><p className={`${lbl} mb-3`}>{title}</p>{children}</div>;
 }
@@ -71,20 +63,20 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
     <div className="space-y-4 w-full min-w-0">
       {variant === "drawer" && (
         <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold border" style={{ color: sciColor, borderColor: `${sciColor}38`, backgroundColor: `${sciColor}14` }}>{sciName}</span>
-          <span className="text-[10px] vision-text-muted">{property.cp} {property.ville}</span>
+          <span className="px-2 py-0.5 rounded-lg text-xs font-bold border" style={{ color: sciColor, borderColor: `${sciColor}38`, backgroundColor: `${sciColor}14` }}>{sciName}</span>
+          <span className="text-xs vision-text-muted">{property.cp} {property.ville}</span>
         </div>
       )}
 
       <div className={`grid grid-cols-2 sm:grid-cols-3 ${variant === "page" ? "xl:grid-cols-4" : "lg:grid-cols-4"} gap-2 sm:gap-3 w-full min-w-0`}>
-        <Metric label="Type" value={`${property.type} · ${property.surface} m²`} />
-        <Metric label="Lots" value={String(property.lots)} />
-        <Metric label="Valeur actuelle" value={fmt(property.valeurActuelle)} color="#60a5fa" />
-        <Metric label="Plus-value" value={`${pv >= 0 ? "+" : ""}${fmt(pv)}`} color={pv >= 0 ? "#34d399" : "#f87171"} />
-        <Metric label="Loyer mensuel" value={property.loyer > 0 ? fmt(property.loyer) : "—"} />
-        <Metric label="Cash-flow mensuel" value={`${cf >= 0 ? "+" : ""}${fmt(cf)}`} color={cf >= 0 ? "#34d399" : "#f87171"} />
-        <Metric label="Taxe foncière / an" value={fmt(property.taxeFonciere)} />
-        <Metric label="Assurance / an" value={fmt(property.assurance)} />
+        <MetricCard label="Type" value={`${property.type} · ${property.surface} m²`} />
+        <MetricCard label="Lots" value={String(property.lots)} />
+        <MetricCard label="Valeur actuelle" value={fmt(property.valeurActuelle)} color="#60a5fa" />
+        <MetricCard label="Plus-value" value={`${pv >= 0 ? "+" : ""}${fmt(pv)}`} color={pv >= 0 ? "#34d399" : "#f87171"} />
+        <MetricCard label="Loyer mensuel" value={property.loyer > 0 ? fmt(property.loyer) : "—"} />
+        <MetricCard label="Cash-flow mensuel" value={`${cf >= 0 ? "+" : ""}${fmt(cf)}`} color={cf >= 0 ? "#34d399" : "#f87171"} />
+        <MetricCard label="Taxe foncière / an" value={fmt(property.taxeFonciere)} />
+        <MetricCard label="Assurance / an" value={fmt(property.assurance)} />
       </div>
 
       <Section title="Acquisition">
@@ -99,14 +91,14 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
       {property.credit && summary && loanInput && variant !== "page" && (
         <Section title="Crédit immobilier">
           <div className="grid grid-cols-2 gap-2 mb-3">
-            <Metric label="Banque" value={property.credit.banque} />
-            <Metric label="Taux" value={`${property.credit.taux} %`} />
-            <Metric label="Montant emprunté" value={fmt(property.credit.montantInitial)} />
-            <Metric label="Capital restant" value={fmt(summary.capitalRestant)} color="#f87171" />
-            <Metric label="Mensualité crédit" value={fmtD(summary.mensualite)} color="#a78bfa" />
-            <Metric label="Mensualité totale" value={fmtD(summary.mensualiteTotale)} />
-            <Metric label="Remboursé" value={`${summary.pctRembourse} %`} color="#34d399" />
-            <Metric label="Fin de prêt" value={summary.finCredit.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })} />
+            <MetricCard label="Banque" value={property.credit.banque} />
+            <MetricCard label="Taux" value={`${property.credit.taux} %`} />
+            <MetricCard label="Montant emprunté" value={fmt(property.credit.montantInitial)} />
+            <MetricCard label="Capital restant" value={fmt(summary.capitalRestant)} color="#f87171" />
+            <MetricCard label="Mensualité crédit" value={fmtD(summary.mensualite)} color="#a78bfa" />
+            <MetricCard label="Mensualité totale" value={fmtD(summary.mensualiteTotale)} />
+            <MetricCard label="Remboursé" value={`${summary.pctRembourse} %`} color="#34d399" />
+            <MetricCard label="Fin de prêt" value={summary.finCredit.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })} />
           </div>
           {onViewCredit && (
             <button onClick={onViewCredit} className="w-full min-h-[44px] py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-blue-400/25 bg-blue-500/15 vision-info-text hover:bg-blue-500/25 transition-colors">
@@ -144,31 +136,35 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
     <div className="space-y-4 w-full min-w-0">
       {!previewSchedule && (
         <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold border flex-shrink-0" style={{ color: sciColor, borderColor: `${sciColor}38`, backgroundColor: `${sciColor}14` }}>{sciName}</span>
+          <span className="px-2 py-0.5 rounded-lg text-xs font-bold border flex-shrink-0" style={{ color: sciColor, borderColor: `${sciColor}38`, backgroundColor: `${sciColor}14` }}>{sciName}</span>
           <span className="text-xs vision-text-muted break-words min-w-0">{property.address}, {property.ville}</span>
         </div>
       )}
 
       {!previewSchedule && (
       <div className={`grid grid-cols-2 sm:grid-cols-3 ${fullSchedule ? "xl:grid-cols-4" : "lg:grid-cols-4"} gap-2 sm:gap-3 w-full min-w-0`}>
-        <Metric label="Banque" value={credit.banque} />
-        <Metric label="Taux annuel" value={`${credit.taux} %`} />
-        <Metric label="Montant emprunté" value={fmt(credit.montantInitial)} />
-        <Metric label="Capital restant" value={fmt(summary.capitalRestant)} color="#f87171" />
-        <Metric label="Mensualité crédit" value={fmtD(summary.mensualite)} color="#a78bfa" />
-        <Metric label="Assurance / mois" value={fmtD(credit.assuranceMensuelle ?? 0)} />
-        <Metric label="Mensualité totale" value={fmtD(summary.mensualiteTotale)} />
-        <Metric label="Intérêts totaux" value={fmt(summary.totalInterets)} color="#fbbf24" />
-        <Metric label="Cash-flow bien" value={`${cf >= 0 ? "+" : ""}${fmt(cf)}`} color={cf >= 0 ? "#34d399" : "#f87171"} />
-        <Metric label="Fin de prêt" value={summary.finCredit.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })} />
+        <MetricCard label="Banque" value={credit.banque} />
+        <MetricCard label="Taux annuel" value={`${credit.taux} %`} />
+        <MetricCard label="Montant emprunté" value={fmt(credit.montantInitial)} />
+        <MetricCard label="Capital restant" value={fmt(summary.capitalRestant)} color="#f87171" />
+        <MetricCard label="Mensualité crédit" value={fmtD(summary.mensualite)} color="#a78bfa" />
+        <MetricCard label="Assurance / mois" value={fmtD(credit.assuranceMensuelle ?? 0)} />
+        <MetricCard label="Mensualité totale" value={fmtD(summary.mensualiteTotale)} />
+        <MetricCard label="Intérêts totaux" value={fmt(summary.totalInterets)} color="#fbbf24" />
+        <MetricCard label="Cash-flow bien" value={`${cf >= 0 ? "+" : ""}${fmt(cf)}`} color={cf >= 0 ? "#34d399" : "#f87171"} />
+        <MetricCard label="Fin de prêt" value={summary.finCredit.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })} />
       </div>
       )}
 
       <Section title={previewSchedule ? "Prochaines échéances" : "Tableau d'amortissement"}>
-        <p className="text-[10px] vision-text-muted mb-2 sm:hidden">Glissez horizontalement pour voir toutes les colonnes</p>
-        <div className={`full-page-table-scroll ${fullSchedule ? "max-h-[min(60vh,560px)] sm:max-h-[min(70vh,640px)] overflow-y-auto" : ""} w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x -mx-1 px-1`}>
-          <table className={`w-full text-[10px] sm:text-xs ${fullSchedule ? "min-w-[480px] sm:min-w-[560px]" : "min-w-[400px]"}`}>
-            <thead className={fullSchedule ? "sticky top-0 bg-[#0d1630] z-10 shadow-sm" : ""}>
+        <p className="text-xs vision-text-muted mb-2 sm:hidden">Glissez horizontalement pour les colonnes · faites défiler la page pour voir toutes les lignes</p>
+        <div
+          className={`w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x -mx-1 px-1 ${
+            fullSchedule ? "sm:max-h-[min(70vh,640px)] sm:overflow-y-auto sm:overscroll-y-contain" : ""
+          }`}
+        >
+          <table className={`w-full text-xs sm:text-sm ${fullSchedule ? "min-w-[480px] sm:min-w-[560px]" : "min-w-[400px]"}`}>
+            <thead className={fullSchedule ? "sm:sticky sm:top-0 z-10 shadow-sm [&_tr]:bg-[var(--v-input-bg)]" : ""}>
               <tr className="border-b border-[var(--v-border-subtle)] vision-text-muted uppercase tracking-wider">
                 {[
                   { h: "Mois", hide: false },
@@ -197,12 +193,12 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
           </table>
         </div>
         {!fullSchedule && schedule.length > scheduleRows.length && (
-          <p className="text-[10px] vision-text-muted mt-2 text-center">
+          <p className="text-xs vision-text-muted mt-2 text-center">
             + {schedule.length - scheduleRows.length} échéances · durée totale {credit.duree} mois
           </p>
         )}
         {fullSchedule && (
-          <p className="text-[10px] vision-text-muted mt-2 text-center">{schedule.length} échéances · durée totale {credit.duree} mois</p>
+          <p className="text-xs vision-text-muted mt-2 text-center">{schedule.length} échéances · durée totale {credit.duree} mois</p>
         )}
       </Section>
     </div>
