@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mail, MapPin, Phone, Shield, AlertTriangle } from "lucide-react";
+import { MetricLabel } from "./MetricWithFormula";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, metricsGridPage, tableScroll, mobileDetailCard, G, lbl } from "./layout";
 import type { AlertItem, Property, SCI, Tenant } from "./entityTypes";
 
@@ -21,7 +22,7 @@ function CashChip({ value }: { value: number }) {
   const pos = value >= 0;
   return (
     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${pos ? "bg-emerald-400/14 vision-positive-text border border-emerald-400/20" : "bg-red-400/14 vision-negative-text border border-red-400/20"}`}>
-      {pos ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+      {pos ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
       {pos ? "+" : ""}{fmt(value)}
     </span>
   );
@@ -93,7 +94,7 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
           { l: "Régime", v: sci.type, c: sci.color },
         ].map((m) => (
           <div key={m.l} className="vision-surface rounded-xl p-3 min-w-0">
-            <p className="text-[9px] sm:vision-table-head mb-1">{m.l}</p>
+            <MetricLabel label={m.l} />
             <p className="text-xs sm:text-sm font-bold font-mono break-words" style={{ color: m.c }}>{m.v}</p>
           </div>
         ))}
@@ -119,7 +120,7 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
                 <CashChip value={cashFlow(p)} />
               </div>
             ))}
-            {props.length > 5 && <p className="text-[10px] vision-text-muted text-center pt-1">+ {props.length - 5} autres biens</p>}
+            {props.length > 5 && <p className="text-xs vision-text-muted text-center pt-1">+ {props.length - 5} autres biens</p>}
           </div>
         </div>
       )}
@@ -146,7 +147,7 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
               <thead>
                 <tr className="border-b border-[var(--v-border-subtle)]">
                   {["Adresse", "Type", "Valeur", "Loyer", "Cash-flow", "CRD"].map((h) => (
-                    <th key={h} className="text-left py-2 px-3 vision-text-muted uppercase tracking-wider text-[10px]">{h}</th>
+                    <th key={h} className="text-left py-2 px-3 vision-text-muted uppercase tracking-wider text-xs">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -157,7 +158,7 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
                     onClick={() => onSelectProperty?.(p.id)}
                     className={`border-b border-[var(--v-border-subtle)] ${onSelectProperty ? "cursor-pointer hover:vision-surface" : ""}`}
                   >
-                    <td className="py-3 px-3"><p className="font-medium vision-text">{p.address}</p><p className="text-[10px] vision-text-muted">{p.ville}</p></td>
+                    <td className="py-3 px-3"><p className="font-medium vision-text">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p></td>
                     <td className="py-3 px-3 vision-text-muted">{p.type} · {p.surface}m²</td>
                     <td className="py-3 px-3 font-mono vision-info-text">{fmt(p.valeurActuelle)}</td>
                     <td className="py-3 px-3 font-mono">{p.loyer > 0 ? fmt(p.loyer) : "—"}</td>
@@ -172,8 +173,8 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
             {props.map((p) => (
               <button key={p.id} type="button" onClick={() => onSelectProperty?.(p.id)} className={mobileDetailCard}>
                 <p className="text-sm font-semibold vision-text break-words">{p.address}</p>
-                <p className="text-[10px] vision-text-muted mt-0.5">{p.type} · {p.surface}m² · {p.ville}</p>
-                <div className="grid grid-cols-2 gap-2 mt-3 text-[10px] sm:text-xs">
+                <p className="text-xs vision-text-muted mt-0.5">{p.type} · {p.surface}m² · {p.ville}</p>
+                <div className="grid grid-cols-2 gap-2 mt-3 text-xs sm:text-sm">
                   <div><span className="vision-text-muted">Valeur</span><p className="font-mono font-semibold vision-info-text mt-0.5">{fmt(p.valeurActuelle)}</p></div>
                   <div><span className="vision-text-muted">Loyer</span><p className="font-mono vision-text mt-0.5">{p.loyer > 0 ? fmt(p.loyer) : "—"}</p></div>
                   <div><span className="vision-text-muted">Cash-flow</span><div className="mt-0.5"><CashChip value={cashFlow(p)} /></div></div>
@@ -206,27 +207,27 @@ export function TenantDetailContent({ tenant, property, sci, variant = "drawer" 
         <div className="flex-1 min-w-0 w-full">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
             <p className="text-base sm:text-lg font-bold vision-text break-words">{tenant.nom}</p>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full self-start" style={{ backgroundColor: ss.bg, color: ss.color }}>{tenant.statut}</span>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full self-start" style={{ backgroundColor: ss.bg, color: ss.color }}>{tenant.statut}</span>
           </div>
-          <div className="flex items-center gap-1 mt-2 min-w-0"><Phone size={11} className="vision-text-muted flex-shrink-0" /><p className="text-xs sm:text-sm vision-text-muted break-all">{tenant.tel}</p></div>
-          <div className="flex items-center gap-1 min-w-0"><Mail size={11} className="vision-text-muted flex-shrink-0" /><p className="text-xs sm:text-sm vision-text-muted break-all">{tenant.email}</p></div>
+          <div className="flex items-center gap-1.5 mt-2 min-w-0"><Phone size={14} className="vision-text-muted flex-shrink-0" /><p className="text-xs sm:text-sm vision-text-muted break-all">{tenant.tel}</p></div>
+          <div className="flex items-center gap-1.5 min-w-0"><Mail size={14} className="vision-text-muted flex-shrink-0" /><p className="text-xs sm:text-sm vision-text-muted break-all">{tenant.email}</p></div>
         </div>
       </div>
       {property && (
         <div className="vision-surface rounded-xl p-3 mb-4 flex items-start gap-2 min-w-0">
-          <MapPin size={12} style={{ color: sci.color }} className="flex-shrink-0 mt-0.5" />
-          <div className="min-w-0"><p className="text-sm font-semibold vision-text break-words">{property.address}</p><p className="text-[10px] vision-text-muted">{property.ville} · {property.type}</p></div>
+          <MapPin size={14} style={{ color: sci.color }} className="flex-shrink-0 mt-0.5" />
+          <div className="min-w-0"><p className="text-sm font-semibold vision-text break-words">{property.address}</p><p className="text-xs vision-text-muted">{property.ville} · {property.type}</p></div>
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-4">
-        <div className="vision-surface rounded-xl p-3 min-w-0"><p className="text-[9px] vision-text-muted mb-1">Loyer</p><p className="font-mono font-bold vision-text break-words">{fmt(tenant.loyer)}</p></div>
-        <div className="vision-surface rounded-xl p-3 min-w-0"><p className="text-[9px] vision-text-muted mb-1">Charges</p><p className="font-mono font-bold vision-text break-words">{fmt(tenant.charges)}</p></div>
-        <div className="vision-surface rounded-xl p-3 min-w-0 sm:col-span-1 col-span-1"><p className="text-[9px] vision-text-muted mb-1">Total mensuel</p><p className="font-mono font-bold vision-positive-text break-words">{fmt(tenant.loyer + tenant.charges)}</p></div>
+        <div className="vision-surface rounded-xl p-3 min-w-0"><p className="text-xs vision-text-muted mb-1">Loyer</p><p className="font-mono font-bold vision-text break-words">{fmt(tenant.loyer)}</p></div>
+        <div className="vision-surface rounded-xl p-3 min-w-0"><p className="text-xs vision-text-muted mb-1">Charges</p><p className="font-mono font-bold vision-text break-words">{fmt(tenant.charges)}</p></div>
+        <div className="vision-surface rounded-xl p-3 min-w-0 sm:col-span-1 col-span-1"><p className="text-xs vision-text-muted mb-1">Total mensuel</p><p className="font-mono font-bold vision-positive-text break-words">{fmt(tenant.loyer + tenant.charges)}</p></div>
       </div>
       <div>
-        <div className="flex justify-between mb-1.5 text-[10px] vision-text-muted"><span>{tenant.debutBail}</span><span>{tenant.finBail}</span></div>
+        <div className="flex justify-between mb-1.5 text-xs vision-text-muted"><span>{tenant.debutBail}</span><span>{tenant.finBail}</span></div>
         <GBar pct={pct} color={sci.color} />
-        <p className="text-[10px] vision-text-muted mt-1">{pct < 100 ? `${100 - pct}% de bail restant` : "Bail terminé"}</p>
+        <p className="text-xs vision-text-muted mt-1">{pct < 100 ? `${100 - pct}% de bail restant` : "Bail terminé"}</p>
       </div>
     </>
   );
@@ -265,7 +266,7 @@ export function AlertDetailContent({ alert }: { alert: AlertItem }) {
           <Icon size={18} style={{ color: cfg.color }} />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>{cfg.label}</span>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>{cfg.label}</span>
           <p className="text-sm sm:text-base vision-text-muted mt-2 leading-relaxed break-words">{alert.detail}</p>
         </div>
       </div>
@@ -321,7 +322,7 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
             <div className={`${tableScroll} full-page-table-scroll`}>
               <table className="w-full min-w-[520px] text-xs">
                 <thead>
-                  <tr className="border-b border-[var(--v-border-subtle)] vision-text-muted uppercase text-[10px]">
+                  <tr className="border-b border-[var(--v-border-subtle)] vision-text-muted uppercase text-xs">
                     {["Bien", "Loyer", "Crédit", "Taxe/mois", "Cash-flow"].map((h) => (
                       <th key={h} className="text-left py-2 px-2 font-bold">{h}</th>
                     ))}
@@ -332,7 +333,7 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
                     const cf = cashFlow(p);
                     return (
                       <tr key={p.id} className="border-b border-[var(--v-border-subtle)]">
-                        <td className="py-2 px-2"><p className="vision-text">{p.address}</p><p className="text-[10px] vision-text-muted">{p.ville}</p></td>
+                        <td className="py-2 px-2"><p className="vision-text">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p></td>
                         <td className="py-2 px-2 font-mono">{fmt(p.loyer)}</td>
                         <td className="py-2 px-2 font-mono vision-negative-text">{fmt(p.credit?.mensualite ?? 0)}</td>
                         <td className="py-2 px-2 font-mono">{fmt(p.taxeFonciere / 12)}</td>
@@ -350,7 +351,7 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
               return (
                 <div key={p.id} className={`${mobileDetailCard} cursor-default active:scale-100`}>
                   <p className="text-sm font-semibold vision-text break-words">{p.address}</p>
-                  <div className="grid grid-cols-2 gap-2 mt-2 text-[10px]">
+                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
                     <div><span className="vision-text-muted">Loyer</span><p className="font-mono vision-text mt-0.5">{fmt(p.loyer)}</p></div>
                     <div><span className="vision-text-muted">Crédit</span><p className="font-mono vision-negative-text mt-0.5">{fmt(p.credit?.mensualite ?? 0)}</p></div>
                     <div><span className="vision-text-muted">Taxe/mois</span><p className="font-mono mt-0.5">{fmt(p.taxeFonciere / 12)}</p></div>

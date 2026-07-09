@@ -22,6 +22,9 @@ import {
   pageWrap, formWrap, cardsGrid, G, GE, inp, lbl, btnP, btnG, btnD, btnS, selectCls,
 } from "@/app/components/layout";
 import { ChartTooltipContent, chartAxisTick, chartGridStroke } from "@/app/components/ChartTooltip";
+import { MetricLabel } from "@/app/components/MetricWithFormula";
+import { TooltipProvider } from "@/app/components/ui/tooltip";
+import { greetingLabel, SESSION_USER } from "@/lib/sessionUser";
 import {
   applyVisionTheme, loadThemeId, loadCustomColors, getPresetVars, customToVars,
   type CustomThemeColors,
@@ -117,7 +120,7 @@ function LoanCalcSummary({ credit }: { credit: Pick<Credit, "montantInitial" | "
         { l: "Fin de prêt", v: summary.finCredit.toLocaleDateString("fr-FR", { month: "short", year: "numeric" }), c: "var(--v-text-muted)" },
       ].map((m) => (
         <div key={m.l} className="vision-surface rounded-xl p-3">
-          <p className="vision-kpi-label mb-1">{m.l}</p>
+          <MetricLabel label={m.l} />
           <p className="text-xs font-bold font-mono" style={{ color: m.c }}>{m.v}</p>
         </div>
       ))}
@@ -163,7 +166,7 @@ function CashChip({ value }: { value: number }) {
   return <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${pos ? "bg-emerald-400/14 vision-positive-text border border-emerald-400/20" : "bg-red-400/14 vision-negative-text border border-red-400/20"}`}>{pos ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}{pos ? "+" : ""}{fmt(value)}</span>;
 }
 function SCIChip({ sci }: { sci: SCI }) {
-  return <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-bold border" style={{ color: sci.color, borderColor: `${sci.color}28`, backgroundColor: `${sci.color}14` }}><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sci.color }} />{sci.shortName}</span>;
+  return <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-bold border" style={{ color: sci.color, borderColor: `${sci.color}28`, backgroundColor: `${sci.color}14` }}><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sci.color }} />{sci.shortName}</span>;
 }
 function Ava({ initiales, color, size = 36 }: { initiales: string; color: string; size?: number }) {
   return <div className="rounded-xl flex items-center justify-center font-bold flex-shrink-0" style={{ width: size, height: size, backgroundColor: `${color}28`, border: `1px solid ${color}38`, color, fontSize: size * 0.33 }}>{initiales}</div>;
@@ -215,7 +218,10 @@ function DashboardView({ properties, scis, onSelectProperty }: { properties: Pro
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
         {kpis.map((k) => (
           <motion.div key={k.l} variants={itemV} whileHover={{ y: -3, scale: 1.02 }} className={`${G} p-4 cursor-default`} style={{ borderColor: `${k.color}1e` }}>
-            <div className="flex items-center justify-between mb-3"><p className="text-[9px] sm:text-[10px] font-semibold vision-text-muted uppercase tracking-wider leading-tight">{k.l}</p><div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${k.color}1e` }}><k.Icon size={12} style={{ color: k.color }} /></div></div>
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <MetricLabel label={k.l} className="mb-0 min-w-0" />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${k.color}1e` }}><k.Icon size={16} style={{ color: k.color }} /></div>
+            </div>
             <p className="text-base sm:text-lg font-bold truncate" style={{ color: k.color, fontFamily: "'JetBrains Mono',monospace" }}>{k.v}</p>
           </motion.div>
         ))}
@@ -228,7 +234,7 @@ function DashboardView({ properties, scis, onSelectProperty }: { properties: Pro
         </motion.div>
         <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.18 }} className={`${G} p-4 sm:p-5 xl:col-span-3 w-full min-w-0`}>
           <p className={`${lbl} mb-0.5`}>Évolution du patrimoine</p>
-          <p className="text-[10px] vision-text-muted mb-4">2017–2024 · milliers d&apos;euros</p>
+          <p className="text-xs vision-text-muted mb-4">2017–2024 · milliers d&apos;euros</p>
           <ResponsiveContainer width="100%" height={188}>
             <AreaChart data={PATRIMOINE_DATA} margin={{ top: 5, right: 5, left: -22, bottom: 0 }}>
               <defs>
@@ -255,7 +261,7 @@ function DashboardView({ properties, scis, onSelectProperty }: { properties: Pro
               <p className="text-sm font-bold vision-text leading-tight">{p.address}</p>
               <p className="text-xs vision-text-muted mt-0.5 mb-3">{p.ville} · {p.type}</p>
               <div className="flex items-center justify-between flex-wrap gap-2"><SCIChip sci={sci} /><CashChip value={cashFlow(p)} /></div>
-              <p className="text-[9px] vision-text-muted mt-3 flex items-center gap-1"><Eye size={9} /> Voir le détail</p>
+              <p className="text-xs vision-text-muted mt-3 flex items-center gap-1"><Eye size={14} /> Voir le détail</p>
             </motion.div>
           );
         })}
@@ -288,7 +294,7 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
           {scis.map((s) => (
             <motion.button key={s.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={() => upd("sciId", s.id)} className="flex items-center gap-3 p-3 rounded-xl border transition-all text-left" style={f.sciId === s.id ? { borderColor: s.color, backgroundColor: `${s.color}14` } : { borderColor: "rgba(255,255,255,0.07)", backgroundColor: "rgba(255,255,255,0.02)" }}>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ backgroundColor: `${s.color}22`, color: s.color }}>{s.shortName.slice(0, 2)}</div>
-              <div className="min-w-0"><p className="text-xs font-bold vision-text truncate">{s.shortName}</p><p className="text-[10px] vision-text-muted">{s.type}</p></div>
+              <div className="min-w-0"><p className="text-xs font-bold vision-text truncate">{s.shortName}</p><p className="text-xs vision-text-muted">{s.type}</p></div>
             </motion.button>
           ))}
         </div>
@@ -324,7 +330,7 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
         <AnimatePresence>
           {hasCredit && (
             <motion.div variants={slideV} initial="hidden" animate="show" exit="exit" className="overflow-hidden">
-              <p className="text-[10px] vision-text-muted mb-3">Saisissez le minimum — mensualité, capital restant et intérêts sont calculés automatiquement.</p>
+              <p className="text-xs vision-text-muted mb-3">Saisissez le minimum — mensualité, capital restant et intérêts sont calculés automatiquement.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <GI label="Banque" value={cred.banque} onChange={(e) => updC("banque", e.target.value)} className="sm:col-span-2" />
                 <GI label="Montant emprunté (€)" type="number" value={cred.montantInitial || ""} onChange={(e) => updC("montantInitial", +e.target.value)} />
@@ -383,7 +389,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
                   <div className="h-0.5 w-full" style={{ backgroundColor: sci.color, opacity: 0.45 }} />
                   <div className="p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-2 mb-4">
-                      <div className="min-w-0"><p className="text-sm font-bold vision-text leading-tight">{p.address}</p><div className="flex items-center gap-1 mt-0.5"><MapPin size={9} className="vision-text-muted" /><p className="text-[10px] vision-text-muted">{p.cp} {p.ville}</p></div></div>
+                      <div className="min-w-0"><p className="text-sm font-bold vision-text leading-tight">{p.address}</p><div className="flex items-center gap-1 mt-0.5"><MapPin size={14} className="vision-text-muted" /><p className="text-xs vision-text-muted">{p.cp} {p.ville}</p></div></div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <SCIChip sci={sci} />
                         <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} title="Ouvrir en pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(p.id); }} className="w-7 h-7 rounded-lg vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-all"><Maximize2 size={11} /></motion.button>
@@ -392,16 +398,16 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
                     </div>
                     <div className="grid grid-cols-2 gap-2 mb-4">
                       {[{ l: "Type", v: `${p.type} · ${p.surface}m²` }, { l: "Valeur", v: fmt(p.valeurActuelle) }, { l: "Loyer/mois", v: p.loyer > 0 ? fmt(p.loyer) : "—" }, { l: "Plus-value", v: `${pv >= 0 ? "+" : ""}${fmt(pv)}`, col: pv >= 0 ? "#34d399" : "#f87171" }].map((m) => (
-                        <div key={m.l} className="vision-surface rounded-xl p-3"><p className="vision-kpi-label mb-1">{m.l}</p><p className="text-xs font-bold font-mono truncate vision-text" style={{ color: m.col }}>{m.v}</p></div>
+                        <div key={m.l} className="vision-surface rounded-xl p-3"><MetricLabel label={m.l} /><p className="text-xs font-bold font-mono truncate vision-text" style={{ color: m.col }}>{m.v}</p></div>
                       ))}
                     </div>
-                    <div className="flex items-center justify-between mb-3"><CashChip value={cf} />{p.credit && <span className="text-[10px] vision-text-muted font-mono">{fmt(p.credit.capitalRestant)}</span>}</div>
-                    {p.credit && <div className="mb-4"><GBar pct={cpct} color={sci.color} /><p className="text-[9px] vision-text-muted mt-1">{cpct}% remboursé · fin {finCredit(p.credit)}</p></div>}
-                    <p className="text-[9px] vision-text-muted flex items-center gap-1 mb-2"><Eye size={9} /> Cliquer pour l&apos;aperçu · <Maximize2 size={9} className="inline" /> pour la page complète</p>
+                    <div className="flex items-center justify-between mb-3"><CashChip value={cf} />{p.credit && <span className="text-xs vision-text-muted font-mono">{fmt(p.credit.capitalRestant)}</span>}</div>
+                    {p.credit && <div className="mb-4"><GBar pct={cpct} color={sci.color} /><p className="text-xs vision-text-muted mt-1">{cpct}% remboursé · fin {finCredit(p.credit)}</p></div>}
+                    <p className="text-xs vision-text-muted flex items-center gap-1 mb-2"><Eye size={14} /> Cliquer pour l&apos;aperçu · <Maximize2 size={14} className="inline" /> pour la page complète</p>
                     <AnimatePresence>
                       {confirmDel === p.id
                         ? <DelConfirm onConfirm={() => { onDelete(p.id); setConfirmDel(null); }} onCancel={() => setConfirmDel(null)} />
-                        : <motion.button whileHover={{ backgroundColor: "rgba(239,68,68,0.07)" }} onClick={(e) => { e.stopPropagation(); setConfirmDel(p.id); }} className="w-full mt-1 py-1.5 rounded-xl text-[10px] vision-text-faint hover:vision-negative-text border border-transparent hover:border-red-400/14 transition-all text-center">Supprimer ce bien</motion.button>}
+                        : <motion.button whileHover={{ backgroundColor: "rgba(239,68,68,0.07)" }} onClick={(e) => { e.stopPropagation(); setConfirmDel(p.id); }} className="w-full mt-1 py-1.5 rounded-xl text-xs vision-text-faint hover:vision-negative-text border border-transparent hover:border-red-400/14 transition-all text-center">Supprimer ce bien</motion.button>}
                     </AnimatePresence>
                   </div>
                 </motion.div>
@@ -420,7 +426,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
                     const pv = p.valeurActuelle - p.prixAchat - p.travaux - p.fraisNotaire;
                     return (
                       <motion.tr key={p.id} variants={rowV} initial="hidden" animate="show" transition={{ delay: i * 0.04 }} onClick={() => onSelectProperty(p.id)} className="border-b border-[var(--v-border-subtle)] hover:vision-surface transition-colors group cursor-pointer">
-                        <td className="px-4 py-3.5"><p className="text-sm vision-text font-medium">{p.address}</p><p className="text-[10px] vision-text-muted">{p.ville}</p></td>
+                        <td className="px-4 py-3.5"><p className="text-sm vision-text font-medium">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p></td>
                         <td className="px-4 py-3.5"><SCIChip sci={sci} /></td>
                         <td className="px-4 py-3.5 text-xs vision-text-muted whitespace-nowrap">{p.type} · {p.surface}m²</td>
                         <td className="px-4 py-3.5 text-xs font-mono vision-text">{p.loyer > 0 ? fmt(p.loyer) : "—"}</td>
@@ -433,8 +439,8 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
                             <motion.button whileHover={{ scale: 1.1 }} onClick={(e) => { e.stopPropagation(); setEditing(p); setMode("edit"); }} className="w-7 h-7 rounded-lg vision-surface hover:vision-surface-strong flex items-center justify-center vision-text-muted hover:vision-text transition-all"><Pencil size={11} /></motion.button>
                             {confirmDel === p.id ? (
                               <div className="flex gap-1">
-                                <button onClick={(e) => { e.stopPropagation(); onDelete(p.id); setConfirmDel(null); }} className="px-2 py-1 bg-red-500/80 vision-text text-[10px] font-bold rounded-lg">Oui</button>
-                                <button onClick={(e) => { e.stopPropagation(); setConfirmDel(null); }} className="px-2 py-1 vision-surface-strong vision-text-muted text-[10px] rounded-lg">Non</button>
+                                <button onClick={(e) => { e.stopPropagation(); onDelete(p.id); setConfirmDel(null); }} className="px-2 py-1 bg-red-500/80 vision-text text-xs font-bold rounded-lg">Oui</button>
+                                <button onClick={(e) => { e.stopPropagation(); setConfirmDel(null); }} className="px-2 py-1 vision-surface-strong vision-text-muted text-xs rounded-lg">Non</button>
                               </div>
                             ) : <motion.button whileHover={{ scale: 1.1 }} onClick={(e) => { e.stopPropagation(); setConfirmDel(p.id); }} className="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/28 flex items-center justify-center vision-negative-text/55 hover:vision-negative-text transition-all"><Trash2 size={11} /></motion.button>}
                           </div>
@@ -502,14 +508,14 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold" style={{ backgroundColor: `${sci.color}25`, color: sci.color }}>{sci.shortName.slice(0, 2)}</div><div><p className="font-bold vision-text">{sci.name}</p><p className="text-xs vision-text-muted">{sci.creation}</p></div></div>
                   <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold border" style={{ color: sci.color, borderColor: `${sci.color}38`, backgroundColor: `${sci.color}14` }}>{sci.type}</span>
-                    <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(sci.id); }} className="w-8 h-8 rounded-lg vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-all"><Maximize2 size={12} /></motion.button>
+                    <span className="px-2 py-0.5 rounded-lg text-xs font-bold border" style={{ color: sci.color, borderColor: `${sci.color}38`, backgroundColor: `${sci.color}14` }}>{sci.type}</span>
+                    <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(sci.id); }} className="w-8 h-8 rounded-lg vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-all"><Maximize2 size={14} /></motion.button>
                     <motion.button whileHover={{ scale: 1.1 }} onClick={(e) => { e.stopPropagation(); setEditing(sci); setMode("edit"); }} className="w-8 h-8 rounded-lg vision-surface hover:vision-surface-strong flex items-center justify-center vision-text-muted hover:vision-text transition-all"><Pencil size={13} /></motion.button>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {[{ l: "Valeur", v: fmt(sci.valeurEstimee) }, { l: "Loyers/mois", v: fmt(props.reduce((s, p) => s + p.loyer, 0)) }, { l: "Cash-flow", v: `${cf >= 0 ? "+" : ""}${fmt(cf)}` }].map((m) => (
-                    <div key={m.l} className="bg-black/18 backdrop-blur rounded-xl p-3"><p className="text-[9px] vision-text-muted mb-1">{m.l}</p><p className="text-xs font-bold font-mono vision-text truncate">{m.v}</p></div>
+                    <div key={m.l} className="bg-black/18 backdrop-blur rounded-xl p-3"><p className="text-xs vision-text-muted mb-1">{m.l}</p><p className="text-xs font-bold font-mono vision-text truncate">{m.v}</p></div>
                   ))}
                 </div>
               </div>
@@ -517,12 +523,12 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
                 <p className={`${lbl} mb-3`}>Associés</p>
                 <div className="space-y-2.5">{sci.associes.map((a) => <div key={a.name} className="flex items-center gap-3"><Ava initiales={a.name.split(" ").map((n) => n[0]).join("")} color={sci.color} size={28} /><span className="text-xs vision-text-muted flex-1 truncate">{a.name}</span><span className="text-sm font-bold font-mono flex-shrink-0" style={{ color: sci.color }}>{a.parts}%</span></div>)}</div>
               </div>
-              {props.length > 0 && <div className="px-5 pb-4 border-t border-[var(--v-border-subtle)]"><p className={`${lbl} my-3`}>{props.length} bien{props.length > 1 ? "s" : ""}</p><div className="space-y-1.5">{props.map((p) => <motion.div key={p.id} whileHover={{ x: 3 }} className="flex items-center justify-between py-2 px-3 rounded-xl vision-surface hover:vision-surface transition-colors"><div><p className="text-xs font-medium vision-text">{p.address}</p><p className="text-[10px] vision-text-muted">{p.type} · {p.surface}m²</p></div><CashChip value={cashFlow(p)} /></motion.div>)}</div></div>}
-              <p className="px-5 pb-2 text-[9px] vision-text-muted flex items-center gap-1"><Eye size={9} /> Cliquer pour l&apos;aperçu</p>
+              {props.length > 0 && <div className="px-5 pb-4 border-t border-[var(--v-border-subtle)]"><p className={`${lbl} my-3`}>{props.length} bien{props.length > 1 ? "s" : ""}</p><div className="space-y-1.5">{props.map((p) => <motion.div key={p.id} whileHover={{ x: 3 }} className="flex items-center justify-between py-2 px-3 rounded-xl vision-surface hover:vision-surface transition-colors"><div><p className="text-xs font-medium vision-text">{p.address}</p><p className="text-xs vision-text-muted">{p.type} · {p.surface}m²</p></div><CashChip value={cashFlow(p)} /></motion.div>)}</div></div>}
+              <p className="px-5 pb-2 text-xs vision-text-muted flex items-center gap-1"><Eye size={14} /> Cliquer pour l&apos;aperçu</p>
               <AnimatePresence>
                 {confirmDel === sci.id
                   ? <motion.div variants={slideV} initial="hidden" animate="show" exit="exit" className="px-5 pb-4 overflow-hidden"><div className="flex items-center gap-2 pt-3 border-t border-[var(--v-border-subtle)]"><p className="text-xs vision-negative-text flex-1">Supprimer cette SCI ?</p><button onClick={() => { onDelete(sci.id); setConfirmDel(null); }} className="px-3 py-1.5 bg-red-500/80 vision-text text-xs font-bold rounded-lg">Oui</button><button onClick={() => setConfirmDel(null)} className="px-3 py-1.5 vision-surface-strong vision-text-muted text-xs rounded-lg">Non</button></div></motion.div>
-                  : <motion.button onClick={(e) => { e.stopPropagation(); setConfirmDel(sci.id); }} className="w-full py-2 text-[10px] vision-text-faint hover:vision-negative-text hover:bg-red-500/07 transition-all">Supprimer cette SCI</motion.button>}
+                  : <motion.button onClick={(e) => { e.stopPropagation(); setConfirmDel(sci.id); }} className="w-full py-2 text-xs vision-text-faint hover:vision-negative-text hover:bg-red-500/07 transition-all">Supprimer cette SCI</motion.button>}
               </AnimatePresence>
             </motion.div>
           );
@@ -547,7 +553,7 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
       <GSec title="Bien associé"><GS label="Bien" value={f.propertyId} onChange={(e) => upd("propertyId", e.target.value)} options={properties.map((p) => ({ value: p.id, label: `${p.address}, ${p.ville}` }))} /></GSec>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5 w-full">
       <GSec title="Prêt bancaire — saisie minimale">
-        <p className="text-[10px] vision-text-muted mb-4">Comme un outil bancaire : renseignez montant, taux et durée. Le reste est calculé automatiquement.</p>
+        <p className="text-xs vision-text-muted mb-4">Comme un outil bancaire : renseignez montant, taux et durée. Le reste est calculé automatiquement.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
           <GI label="Banque" value={f.banque} onChange={(e) => upd("banque", e.target.value)} className="sm:col-span-2" />
           <GI label="Montant emprunté (€)" type="number" value={f.montantInitial || ""} onChange={(e) => upd("montantInitial", +e.target.value)} />
@@ -595,7 +601,7 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-3">
           {[{ l: "Capital total", v: fmt(allCredits.reduce((s, c) => s + c.capitalRestant, 0)), c: "#f87171" }, { l: "Mensualités/mois", v: fmt(allCredits.reduce((s, c) => s + c.mensualite, 0)), c: "#a78bfa" }].map((k) => (
-            <div key={k.l} className={`${G} px-4 py-3`}><p className="text-[10px] vision-text-muted">{k.l}</p><p className="text-base font-bold font-mono mt-0.5" style={{ color: k.c }}>{k.v}</p></div>
+            <div key={k.l} className={`${G} px-4 py-3`}><p className="text-xs vision-text-muted">{k.l}</p><p className="text-base font-bold font-mono mt-0.5" style={{ color: k.c }}>{k.v}</p></div>
           ))}
         </div>
         <button onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto`}><Plus size={14} /><span className="hidden sm:inline">Nouveau crédit</span></button>
@@ -617,14 +623,14 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {[{ l: "Capital restant", v: fmt(c.capitalRestant), col: "#f87171" }, { l: "Mensualité", v: fmt(c.mensualite) }, { l: "Taux", v: `${c.taux} %` }, { l: "Remboursé", v: fmt(c.montantInitial - c.capitalRestant), col: "#34d399" }].map((m) => (
-                  <div key={m.l} className="vision-surface rounded-xl p-3"><p className="vision-kpi-label mb-1">{m.l}</p><p className="text-xs font-bold font-mono" style={{ color: m.col ?? "rgba(255,255,255,0.85)" }}>{m.v}</p></div>
+                  <div key={m.l} className="vision-surface rounded-xl p-3"><MetricLabel label={m.l === "Mensualité" ? "Mensualité crédit" : m.l} /><p className="text-xs font-bold font-mono" style={{ color: m.col ?? "rgba(255,255,255,0.85)" }}>{m.v}</p></div>
                 ))}
               </div>
               <GBar pct={pct} color={sci.color} />
-              <div className="flex items-center justify-between mt-1.5"><span className="text-[9px] vision-text-muted font-mono">{fmt(c.montantInitial)}</span><span className="text-[9px] vision-text-muted flex items-center gap-1"><Calendar size={8} />Fin {finCredit(c)}</span></div>
-              <p className="text-[9px] vision-text-muted mt-2 flex items-center gap-1"><Eye size={9} /> Voir amortissement</p>
+              <div className="flex items-center justify-between mt-1.5"><span className="text-xs vision-text-muted font-mono">{fmt(c.montantInitial)}</span><span className="text-xs vision-text-muted flex items-center gap-1"><Calendar size={14} />Fin {finCredit(c)}</span></div>
+              <p className="text-xs vision-text-muted mt-2 flex items-center gap-1"><Eye size={14} /> Voir amortissement</p>
               <AnimatePresence>
-                {confirmDel === c.id ? <DelConfirm onConfirm={() => del(c)} onCancel={() => setConfirmDel(null)} /> : <motion.button whileHover={{ backgroundColor: "rgba(239,68,68,0.07)" }} onClick={(e) => { e.stopPropagation(); setConfirmDel(c.id); }} className="w-full mt-3 py-1.5 rounded-xl text-[10px] vision-text-faint hover:vision-negative-text border border-transparent hover:border-red-400/14 transition-all">Supprimer</motion.button>}
+                {confirmDel === c.id ? <DelConfirm onConfirm={() => del(c)} onCancel={() => setConfirmDel(null)} /> : <motion.button whileHover={{ backgroundColor: "rgba(239,68,68,0.07)" }} onClick={(e) => { e.stopPropagation(); setConfirmDel(c.id); }} className="w-full mt-3 py-1.5 rounded-xl text-xs vision-text-faint hover:vision-negative-text border border-transparent hover:border-red-400/14 transition-all">Supprimer</motion.button>}
               </AnimatePresence>
             </motion.div>
           );
@@ -673,7 +679,7 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-3">{[{ l: "Actifs", v: `${tenants.filter((t) => t.statut !== "Terminé").length}`, c: "#60a5fa" }, { l: "Loyers/mois", v: fmt(tenants.filter((t) => t.statut === "En cours").reduce((s, t) => s + t.loyer, 0)), c: "#34d399" }, { l: "Impayés", v: `${tenants.filter((t) => t.statut === "Impayé").length}`, c: "#f87171" }].map((k) => <div key={k.l} className={`${G} px-4 py-3`}><p className="text-[10px] vision-text-muted">{k.l}</p><p className="text-base font-bold font-mono mt-0.5" style={{ color: k.c }}>{k.v}</p></div>)}</div>
+        <div className="flex flex-wrap gap-3">{[{ l: "Actifs", v: `${tenants.filter((t) => t.statut !== "Terminé").length}`, c: "#60a5fa" }, { l: "Loyers/mois", v: fmt(tenants.filter((t) => t.statut === "En cours").reduce((s, t) => s + t.loyer, 0)), c: "#34d399" }, { l: "Impayés", v: `${tenants.filter((t) => t.statut === "Impayé").length}`, c: "#f87171" }].map((k) => <div key={k.l} className={`${G} px-4 py-3`}><p className="text-xs vision-text-muted">{k.l}</p><p className="text-base font-bold font-mono mt-0.5" style={{ color: k.c }}>{k.v}</p></div>)}</div>
         <button onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto`}><Plus size={14} /><span className="hidden sm:inline">Nouveau locataire</span></button>
       </div>
       <motion.div variants={gridV} initial="hidden" animate="show" className={cardsGrid}>
@@ -689,24 +695,24 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2"><p className="text-sm font-bold vision-text truncate">{t.nom}</p>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: ss.bg, color: ss.color }}>{t.statut}</span>
-                      <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(t.id); }} className="w-6 h-6 rounded-md vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-all"><Maximize2 size={10} /></motion.button>
-                      <motion.button whileHover={{ scale: 1.1 }} onClick={(e) => { e.stopPropagation(); setEditing(t); setMode("edit"); }} className="w-6 h-6 rounded-md vision-surface hover:vision-surface-strong flex items-center justify-center vision-text-muted hover:vision-text transition-all"><Pencil size={10} /></motion.button>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: ss.bg, color: ss.color }}>{t.statut}</span>
+                      <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(t.id); }} className="w-8 h-8 rounded-md vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-all"><Maximize2 size={14} /></motion.button>
+                      <motion.button whileHover={{ scale: 1.1 }} onClick={(e) => { e.stopPropagation(); setEditing(t); setMode("edit"); }} className="w-8 h-8 rounded-md vision-surface hover:vision-surface-strong flex items-center justify-center vision-text-muted hover:vision-text transition-all"><Pencil size={14} /></motion.button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 mt-0.5"><Phone size={9} className="vision-text-muted" /><p className="text-[10px] vision-text-muted">{t.tel}</p></div>
-                  <div className="flex items-center gap-1"><Mail size={9} className="vision-text-muted" /><p className="text-[10px] vision-text-muted truncate">{t.email}</p></div>
+                  <div className="flex items-center gap-1 mt-0.5"><Phone size={14} className="vision-text-muted" /><p className="text-xs vision-text-muted">{t.tel}</p></div>
+                  <div className="flex items-center gap-1"><Mail size={14} className="vision-text-muted" /><p className="text-xs vision-text-muted truncate">{t.email}</p></div>
                 </div>
               </div>
-              {prop && <motion.div whileHover={{ x: 2 }} className="vision-surface rounded-xl p-3 mb-3 flex items-center gap-2"><MapPin size={10} style={{ color: sci.color }} className="flex-shrink-0" /><div className="min-w-0"><p className="text-xs font-semibold vision-text truncate">{prop.address}</p><p className="text-[10px] vision-text-muted">{prop.ville} · {prop.type}</p></div></motion.div>}
-              <div className="mb-3"><div className="flex justify-between mb-1.5"><span className="text-[9px] vision-text-muted">{t.debutBail}</span><span className="text-[9px] vision-text-muted">{t.finBail}</span></div><GBar pct={pct} color={sci.color} /><p className="text-[9px] vision-text-muted mt-1">{pct < 100 ? `${100 - pct}% de bail restant` : "Bail terminé"}</p></div>
+              {prop && <motion.div whileHover={{ x: 2 }} className="vision-surface rounded-xl p-3 mb-3 flex items-center gap-2"><MapPin size={14} style={{ color: sci.color }} className="flex-shrink-0" /><div className="min-w-0"><p className="text-xs font-semibold vision-text truncate">{prop.address}</p><p className="text-xs vision-text-muted">{prop.ville} · {prop.type}</p></div></motion.div>}
+              <div className="mb-3"><div className="flex justify-between mb-1.5"><span className="text-xs vision-text-muted">{t.debutBail}</span><span className="text-xs vision-text-muted">{t.finBail}</span></div><GBar pct={pct} color={sci.color} /><p className="text-xs vision-text-muted mt-1">{pct < 100 ? `${100 - pct}% de bail restant` : "Bail terminé"}</p></div>
               <div className="flex items-center justify-between pt-3 border-t border-[var(--v-border-subtle)]">
-                <div><p className="text-[9px] vision-text-muted">Loyer</p><p className="text-sm font-bold font-mono vision-text">{fmt(t.loyer)}</p></div>
-                {t.charges > 0 && <div><p className="text-[9px] vision-text-muted">Charges</p><p className="text-xs font-mono vision-text-muted">{fmt(t.charges)}</p></div>}
-                <div><p className="text-[9px] vision-text-muted">Total</p><p className="text-sm font-bold font-mono" style={{ color: "#34d399" }}>{fmt(t.loyer + t.charges)}</p></div>
+                <div><p className="text-xs vision-text-muted">Loyer</p><p className="text-sm font-bold font-mono vision-text">{fmt(t.loyer)}</p></div>
+                {t.charges > 0 && <div><p className="text-xs vision-text-muted">Charges</p><p className="text-xs font-mono vision-text-muted">{fmt(t.charges)}</p></div>}
+                <div><p className="text-xs vision-text-muted">Total</p><p className="text-sm font-bold font-mono" style={{ color: "#34d399" }}>{fmt(t.loyer + t.charges)}</p></div>
               </div>
               <AnimatePresence>
-                {confirmDel === t.id ? <DelConfirm onConfirm={() => { onDelete(t.id); setConfirmDel(null); }} onCancel={() => setConfirmDel(null)} /> : <motion.button whileHover={{ backgroundColor: "rgba(239,68,68,0.07)" }} onClick={() => setConfirmDel(t.id)} className="w-full mt-3 py-1.5 rounded-xl text-[10px] vision-text-faint hover:vision-negative-text border border-transparent hover:border-red-400/14 transition-all">Supprimer</motion.button>}
+                {confirmDel === t.id ? <DelConfirm onConfirm={() => { onDelete(t.id); setConfirmDel(null); }} onCancel={() => setConfirmDel(null)} /> : <motion.button whileHover={{ backgroundColor: "rgba(239,68,68,0.07)" }} onClick={() => setConfirmDel(t.id)} className="w-full mt-3 py-1.5 rounded-xl text-xs vision-text-faint hover:vision-negative-text border border-transparent hover:border-red-400/14 transition-all">Supprimer</motion.button>}
               </AnimatePresence>
             </motion.div>
           );
@@ -812,7 +818,7 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
             <tbody>
               {items.map(({ p, cr, pv, pct, sci }, i) => (
                 <motion.tr key={p.id} variants={rowV} initial="hidden" animate="show" transition={{ delay: i * 0.04 }} onClick={() => onSelectProperty(p.id)} className="border-b border-[var(--v-border-subtle)] hover:vision-surface transition-colors cursor-pointer group">
-                  <td className="px-5 py-3.5"><p className="text-sm vision-text font-medium">{p.address}</p><p className="text-[10px] vision-text-muted">{p.ville} · {p.type}</p></td>
+                  <td className="px-5 py-3.5"><p className="text-sm vision-text font-medium">{p.address}</p><p className="text-xs vision-text-muted">{p.ville} · {p.type}</p></td>
                   <td className="px-5 py-3.5"><SCIChip sci={sci} /></td>
                   <td className="px-5 py-3.5 font-mono text-xs vision-text-muted">{fmt(cr)}</td>
                   <td className="px-5 py-3.5 font-mono text-xs font-semibold vision-text/82">{fmt(p.valeurActuelle)}</td>
@@ -831,7 +837,7 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
         <div className="md:hidden p-4 space-y-2">
           {items.map(({ p, pv, pct, sci }) => (
             <button key={p.id} type="button" onClick={() => onSelectProperty(p.id)} className="w-full flex items-center justify-between py-3 border-b border-[var(--v-border-subtle)] last:border-0 text-left hover:vision-surface px-1 rounded-lg transition-colors">
-              <div className="min-w-0 mr-3"><p className="text-xs font-medium vision-text truncate">{p.address}</p><p className="text-[10px] vision-text-muted">{p.ville}</p><div className="mt-1"><SCIChip sci={sci} /></div></div>
+              <div className="min-w-0 mr-3"><p className="text-xs font-medium vision-text truncate">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p><div className="mt-1"><SCIChip sci={sci} /></div></div>
               <div className="text-right flex-shrink-0"><p className="text-sm font-bold font-mono" style={{ color: pv >= 0 ? "#34d399" : "#f87171" }}>{pv >= 0 ? "+" : ""}{fmt(pv)}</p><p className="text-xs font-mono" style={{ color: pct >= 0 ? "#34d399" : "#f87171" }}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</p></div>
             </button>
           ))}
@@ -856,7 +862,7 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
       <div className="grid grid-cols-3 gap-4">
         {(["high", "medium", "low"] as const).map((sev, i) => {
           const cfg = sevCfg[sev]; const cnt = alerts.filter((a) => a.severity === sev).length;
-          return <motion.div key={sev} variants={itemV} initial="hidden" animate="show" transition={{ delay: i * 0.07 }} className={`${G} p-4`} style={{ borderColor: cfg.border }}><p className="text-[10px] vision-text-muted mb-1">{cfg.label}s</p><p className="text-3xl font-bold" style={{ color: cfg.color, fontFamily: "'JetBrains Mono',monospace" }}>{cnt}</p></motion.div>;
+          return <motion.div key={sev} variants={itemV} initial="hidden" animate="show" transition={{ delay: i * 0.07 }} className={`${G} p-4`} style={{ borderColor: cfg.border }}><p className="text-xs vision-text-muted mb-1">{cfg.label}s</p><p className="text-3xl font-bold" style={{ color: cfg.color, fontFamily: "'JetBrains Mono',monospace" }}>{cnt}</p></motion.div>;
         })}
       </div>
       <div className="relative min-w-0">
@@ -873,8 +879,8 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div><p className="text-sm font-bold vision-text">{a.title}</p><p className="text-xs vision-text/37 mt-0.5 leading-relaxed">{a.detail}</p></div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full" style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>{cfg.label}</span>
-                      <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(a.id); }} className="w-7 h-7 rounded-xl vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-colors"><Maximize2 size={12} /></motion.button>
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>{cfg.label}</span>
+                      <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(a.id); }} className="w-7 h-7 rounded-xl vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-colors"><Maximize2 size={14} /></motion.button>
                       <motion.button whileHover={{ scale: 1.1, rotate: 90 }} transition={{ duration: 0.18 }} onClick={(e) => { e.stopPropagation(); onDelete(a.id); }} className="w-7 h-7 rounded-xl vision-surface hover:bg-red-500/28 flex items-center justify-center vision-text-muted hover:vision-negative-text transition-colors"><X size={13} /></motion.button>
                     </div>
                   </div>
@@ -932,6 +938,10 @@ export default function App() {
   const closeFullPage = () => { setFullPageTarget(null); setPropertySection("property"); };
   const openPropertyDrawer = (id: string, credit = false) => openDrawer({ kind: "property", id, section: credit ? "credit" : "property" });
   const openPropertyFullPage = (id: string, section: "property" | "credit" = "property") => openFullPage({ kind: "property", id, section });
+  const handlePropertySectionChange = (s: "property" | "credit") => {
+    setPropertySection(s);
+    setFullPageTarget((t) => (t?.kind === "property" ? { ...t, section: s } : t));
+  };
 
   const handleThemeChange = (id: string) => {
     setThemeId(id);
@@ -1064,6 +1074,7 @@ export default function App() {
   const handleNav = (v: View) => { setView(v); setSidebarOpen(false); closeFullPage(); closeDrawer(); };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="h-dvh min-h-0 flex overflow-hidden vision-app-bg">
       {/* Blobs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
@@ -1081,28 +1092,28 @@ export default function App() {
       </AnimatePresence>
 
       {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-full z-50 w-[min(85vw,218px)] sm:w-[218px] flex flex-col transition-transform duration-300 ease-in-out xl:relative xl:translate-x-0 xl:z-auto xl:w-[218px] xl:flex-shrink-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+      <aside className={`fixed top-0 left-0 h-full z-50 w-[min(88vw,252px)] sm:w-[252px] flex flex-col transition-transform duration-300 ease-in-out xl:relative xl:translate-x-0 xl:z-auto xl:w-[252px] xl:flex-shrink-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ background: "var(--v-sidebar-bg)", borderRight: "1px solid var(--v-sidebar-border)", backdropFilter: "blur(24px)" }}>
         <div className="px-5 py-5 flex items-center justify-between">
           <BrandLogo />
-          <button onClick={() => setSidebarOpen(false)} className="xl:hidden w-7 h-7 rounded-lg vision-glass flex items-center justify-center vision-text-muted"><X size={13} /></button>
+          <button onClick={() => setSidebarOpen(false)} className="xl:hidden w-9 h-9 min-h-[44px] rounded-lg vision-glass flex items-center justify-center vision-text-muted"><X size={18} /></button>
         </div>
-        <nav className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
           {NAV.map(({ id, label, Icon }) => {
             const active = view === id;
             return (
               <motion.button key={id} onClick={() => handleNav(id)} whileHover={!active ? { x: 3 } : {}} whileTap={{ scale: 0.97 }}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all duration-150 ${active ? "vision-nav-active" : "vision-nav-idle hover:opacity-90"}`}>
-                <Icon size={14} />
-                <span className="text-xs font-semibold flex-1">{label}</span>
-                <AnimatePresence>{id === "alertes" && highAlerts > 0 && <motion.span key="b" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center bg-red-500 text-white">{highAlerts}</motion.span>}</AnimatePresence>
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-150 ${active ? "vision-nav-active" : "vision-nav-idle hover:opacity-90"}`}>
+                <Icon className="vision-nav-icon" strokeWidth={2} />
+                <span className="flex-1">{label}</span>
+                <AnimatePresence>{id === "alertes" && highAlerts > 0 && <motion.span key="b" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="text-xs font-bold rounded-full min-w-[1.25rem] h-5 px-1 flex items-center justify-center bg-red-500 text-white">{highAlerts}</motion.span>}</AnimatePresence>
               </motion.button>
             );
           })}
         </nav>
         <ThemeSettings themeId={themeId} customColors={customColors} onThemeChange={handleThemeChange} onCustomChange={handleCustomChange} />
         <div className="px-4 py-4" style={{ borderTop: "1px solid var(--v-sidebar-border)" }}>
-          <div className="flex items-center gap-3"><Ava initiales="JF" color="var(--v-accent)" size={32} /><div><p className="vision-text text-xs font-semibold">Johann Faraut</p><p className="text-[10px] vision-text-faint">Gérant</p></div></div>
+          <div className="flex items-center gap-3"><Ava initiales={SESSION_USER.initials} color="var(--v-accent)" size={36} /><div><p className="vision-text text-sm font-semibold">{SESSION_USER.name}</p><p className="text-xs vision-text-faint">{SESSION_USER.role}</p></div></div>
         </div>
       </aside>
 
@@ -1110,26 +1121,36 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative z-10 w-full">
         <header className="px-4 sm:px-6 py-3.5 flex items-center justify-between flex-shrink-0" style={{ background: "var(--v-header-bg)", borderBottom: "1px solid var(--v-header-border)", backdropFilter: "blur(16px)" }}>
           <div className="flex items-center gap-3">
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }} onClick={() => setSidebarOpen(true)} className="xl:hidden w-9 h-9 rounded-xl vision-glass flex items-center justify-center vision-text-muted transition-colors"><Menu size={16} /></motion.button>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }} onClick={() => setSidebarOpen(true)} className="xl:hidden w-10 h-10 min-h-[44px] rounded-xl vision-glass flex items-center justify-center vision-text-muted transition-colors"><Menu size={20} /></motion.button>
             <div>
-              <h1 className="text-sm font-bold vision-text truncate max-w-[50vw] sm:max-w-none" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                {fullPageTarget ? fullPageHeaderTitle(fullPageTarget, detailCtx, PAGE_TITLES[view]) : PAGE_TITLES[view]}
-              </h1>
-              <p className="text-[10px] mt-0.5 hidden sm:block vision-text-faint">
+              <h1 className="text-base md:text-lg font-bold vision-text truncate max-w-[50vw] sm:max-w-none" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
                 {fullPageTarget
-                  ? fullPageHeaderSubtitle(fullPageTarget, view, detailCtx)
-                  : new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                {apiOnline && <span className="ml-2" style={{ color: "var(--v-positive)" }}>· API connectée</span>}
+                  ? fullPageHeaderTitle(fullPageTarget, detailCtx, PAGE_TITLES[view])
+                  : view === "dashboard"
+                    ? `${greetingLabel()}, ${SESSION_USER.firstName}`
+                    : PAGE_TITLES[view]}
+              </h1>
+              <p className="text-xs sm:text-sm mt-0.5 vision-text-faint sm:block">
+                {fullPageTarget
+                  ? <span className="hidden sm:inline">{fullPageHeaderSubtitle(fullPageTarget, view, detailCtx)}</span>
+                  : <>
+                      <span className="sm:hidden">{view === "dashboard" ? new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : `${greetingLabel()}, ${SESSION_USER.firstName}`}</span>
+                      <span className="hidden sm:inline">
+                        {view !== "dashboard" && <>{greetingLabel()}, {SESSION_USER.firstName} · </>}
+                        {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                      </span>
+                    </>}
+                {!fullPageTarget && apiOnline && <span className="ml-2" style={{ color: "var(--v-positive)" }}>· API connectée</span>}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }} onClick={() => setThemeModalOpen(true)} className="xl:hidden w-9 h-9 rounded-xl vision-glass flex items-center justify-center vision-text-muted" aria-label="Thèmes et couleurs">
-              <Palette size={15} style={{ color: "var(--v-accent)" }} />
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }} onClick={() => setThemeModalOpen(true)} className="xl:hidden w-10 h-10 min-h-[44px] rounded-xl vision-glass flex items-center justify-center vision-text-muted" aria-label="Thèmes et couleurs">
+              <Palette size={18} style={{ color: "var(--v-accent)" }} />
             </motion.button>
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }} onClick={() => handleNav("alertes")} className="relative w-9 h-9 rounded-xl vision-glass flex items-center justify-center vision-text-muted">
-              <Bell size={15} />
-              <AnimatePresence>{highAlerts > 0 && <motion.span key="hb" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold vision-text bg-red-500">{highAlerts}</motion.span>}</AnimatePresence>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }} onClick={() => handleNav("alertes")} className="relative w-10 h-10 min-h-[44px] rounded-xl vision-glass flex items-center justify-center vision-text-muted">
+              <Bell size={18} />
+              <AnimatePresence>{highAlerts > 0 && <motion.span key="hb" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute -top-0.5 -right-0.5 min-w-[1.125rem] h-[1.125rem] px-0.5 rounded-full flex items-center justify-center text-xs font-bold text-white bg-red-500">{highAlerts}</motion.span>}</AnimatePresence>
             </motion.button>
           </div>
         </header>
@@ -1143,7 +1164,7 @@ export default function App() {
                   view={view}
                   ctx={detailCtx}
                   section={propertySection}
-                  onSectionChange={setPropertySection}
+                  onSectionChange={handlePropertySectionChange}
                   onBack={closeFullPage}
                   onOpenProperty={(id) => openPropertyFullPage(id)}
                 />
@@ -1173,13 +1194,13 @@ export default function App() {
             const active = view === id;
             return (
               <motion.button key={id} onClick={() => handleNav(id)} whileTap={{ scale: 0.88 }} className="flex-1 flex flex-col items-center gap-1 py-2.5 min-h-[56px] transition-colors" style={{ color: active ? "var(--v-accent)" : "var(--v-text-faint)" }}>
-                <div className="relative"><Icon size={18} />{id === "alertes" && highAlerts > 0 && <span className="absolute -top-1 -right-1.5 w-3 h-3 rounded-full bg-red-500 text-[7px] font-bold vision-text flex items-center justify-center">{highAlerts}</span>}</div>
-                <span className="text-[9px] font-semibold leading-tight">{label}</span>
+                <div className="relative"><Icon size={20} />{id === "alertes" && highAlerts > 0 && <span className="absolute -top-1 -right-1.5 min-w-[1rem] h-4 px-0.5 rounded-full bg-red-500 text-xs font-bold text-white flex items-center justify-center">{highAlerts}</span>}</div>
+                <span className="text-xs font-semibold leading-tight">{label}</span>
               </motion.button>
             );
           })}
           <motion.button whileTap={{ scale: 0.88 }} onClick={() => setSidebarOpen(true)} className="flex-1 flex flex-col items-center gap-1 py-2.5 min-h-[56px]" style={{ color: "var(--v-text-faint)" }}>
-            <Menu size={18} /><span className="text-[9px] font-semibold leading-tight">Plus</span>
+            <Menu size={20} /><span className="text-xs font-semibold leading-tight">Plus</span>
           </motion.button>
         </nav>
       </div>
@@ -1203,5 +1224,6 @@ export default function App() {
         onPropertyCredit={() => drawerTarget?.kind === "property" && setDrawerTarget({ ...drawerTarget, section: "credit" })}
       />
     </div>
+    </TooltipProvider>
   );
 }

@@ -42,7 +42,7 @@ export function BrandMark({ size = 36, className = "" }: { size?: number; classN
   );
 }
 
-export function BrandLogo({ size = 36, showWordmark = true, className = "", compact = false }: BrandLogoProps) {
+export function BrandLogo({ size = 40, showWordmark = true, className = "", compact = false }: BrandLogoProps) {
   if (!showWordmark) {
     return <BrandMark size={size} className={className} />;
   }
@@ -58,12 +58,12 @@ export function BrandLogo({ size = 36, showWordmark = true, className = "", comp
       {!compact && (
         <div className="min-w-0">
           <p
-            className="vision-text text-sm font-bold leading-none truncate"
+            className="vision-text text-base font-bold leading-none truncate"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             Patrimis
           </p>
-          <p className="text-[10px] tracking-[0.22em] mt-0.5 vision-text-faint uppercase">Patrimoine</p>
+          <p className="text-xs tracking-wide mt-0.5 vision-text-faint uppercase">Patrimoine</p>
         </div>
       )}
     </div>

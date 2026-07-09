@@ -11,7 +11,7 @@ import {
 } from "@/lib/visionTheme";
 
 const G = "vision-glass backdrop-blur-xl border rounded-2xl";
-const lbl = "block text-[10px] sm:text-xs font-bold vision-text-muted uppercase tracking-widest mb-2";
+const lbl = "block text-xs sm:text-sm font-bold vision-text-muted uppercase tracking-widest mb-2";
 
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -105,7 +105,7 @@ export function ThemeSettings({
                         <span key={i} className="h-3 flex-1 rounded-sm" style={{ backgroundColor: c }} />
                       ))}
                     </div>
-                    <span className="text-[10px] font-semibold vision-text">{preset.name}</span>
+                    <span className="text-xs font-semibold vision-text">{preset.name}</span>
                   </button>
                 ))}
                 <button
@@ -118,17 +118,17 @@ export function ThemeSettings({
                       <span key={i} className="h-3 flex-1 rounded-sm border border-[var(--v-glass-border)]" style={{ backgroundColor: c }} />
                     ))}
                   </div>
-                  <span className="text-[10px] font-semibold vision-text">Personnalisé</span>
+                  <span className="text-xs font-semibold vision-text">Personnalisé</span>
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={() => setCustomOpen((o) => !o)}
-                className="w-full text-left text-[10px] font-semibold vision-text-muted flex items-center justify-between py-1"
+                className="w-full text-left text-xs font-semibold vision-text-muted flex items-center justify-between py-1"
               >
                 Personnaliser les couleurs
-                {customOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {customOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
 
               <AnimatePresence>
@@ -157,7 +157,7 @@ export function ThemeSettings({
                       onClick={resetCustom}
                       className="w-full flex items-center justify-center gap-2 min-h-[44px] rounded-xl border border-[var(--v-glass-border)] vision-text-muted text-xs font-medium hover:opacity-80"
                     >
-                      <RotateCcw size={12} />
+                      <RotateCcw size={16} />
                       Réinitialiser le personnalisé
                     </button>
                   </motion.div>

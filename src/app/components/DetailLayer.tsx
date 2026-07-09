@@ -119,7 +119,7 @@ export function FullPageDetail({ target, view, ctx, section, onSectionChange, on
           property={p}
           sciName={sci.shortName}
           sciColor={sci.color}
-          section={target.section ?? section}
+          section={section}
           onSectionChange={onSectionChange}
           onBack={onBack}
           backLabel={backLabel}

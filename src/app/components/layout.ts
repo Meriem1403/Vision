@@ -8,7 +8,8 @@ export const pageEndSpacer = "h-2 sm:h-4 shrink-0";
 export const G = "vision-glass backdrop-blur-xl rounded-2xl w-full min-w-0";
 export const GE = "vision-glass-strong backdrop-blur-2xl rounded-2xl shadow-xl shadow-black/20 w-full min-w-0";
 
-export const lbl = "block text-[10px] sm:text-xs font-bold vision-text-muted uppercase tracking-widest mb-2";
+export const lbl = "block text-xs sm:text-sm font-semibold vision-text-muted uppercase tracking-wide mb-2";
+export const caption = "text-xs vision-text-muted leading-snug";
 
 export const inp =
   "w-full min-h-[44px] sm:min-h-[42px] vision-input border rounded-xl px-4 py-3 text-sm sm:text-base placeholder:text-[var(--v-placeholder)] focus:outline-none focus:border-[var(--v-accent)] focus:ring-2 focus:ring-[var(--v-focus-ring)] transition-all duration-200";

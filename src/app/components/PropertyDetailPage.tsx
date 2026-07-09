@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, CreditCard, Home, Pencil } from "lucide-react";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, G } from "./layout";
@@ -26,12 +26,6 @@ export function PropertyDetailPage({
   onEdit?: () => void;
 }) {
   const creditRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (section === "credit" && creditRef.current) {
-      creditRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [section]);
 
   const hasCredit = !!property.credit;
 
