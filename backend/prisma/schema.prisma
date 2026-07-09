@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model LegalEntity {
+  id            String        @id @default(cuid())
+  slug          String        @unique
+  name          String
+  shortName     String
+  type          String
+  creation      String?
+  valeurEstimee Float         @default(0)
+  color         String        @default("#60a5fa")
+  gradient      String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  properties    Property[]
+  shareholders  Shareholder[]
+}
+
+model Shareholder {
+  id       String      @id @default(cuid())
+  entityId String
+  name     String
+  parts    Float
+  entity   LegalEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([entityId])
+}
+
+model Property {
+  id            String       @id @default(cuid())
+  entityId      String
+  address       String
+  ville         String
+  cp            String
+  type          String
+  surface       Float        @default(0)
+  lots          Int          @default(1)
+  prixAchat     Float        @default(0)
+  travaux       Float        @default(0)
+  fraisNotaire  Float        @default(0)
+  valeurActuelle Float       @default(0)
+  loyer         Float        @default(0)
+  taxeFonciere  Float        @default(0)
+  assurance     Float        @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  entity        LegalEntity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  loan          Loan?
+  tenants       Tenant[]
+
+  @@index([entityId])
+}
+
+model Loan {
+  id                String              @id @default(cuid())
+  propertyId        String              @unique
+  banque            String
+  montantInitial    Float
+  tauxAnnuel        Float
+  dureeMois         Int
+  dateDebut         DateTime
+  assuranceMensuelle Float              @default(0)
+  mensualite        Float
+  capitalRestant    Float
+  amortizationModel String              @default("RATE_BASED")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  property          Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  schedule          AmortizationEntry[]
+
+  @@index([propertyId])
+}
+
+model AmortizationEntry {
+  id            String   @id @default(cuid())
+  loanId        String
+  periode       DateTime
+  moisIndex     Int
+  crd           Float
+  capitalAmorti Float
+  interets      Float
+  assurance     Float
+  mensualite    Float
+  loan          Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@unique([loanId, moisIndex])
+  @@index([loanId, periode])
+}
+
+model Tenant {
+  id         String   @id @default(cuid())
+  propertyId String
+  nom        String
+  initiales  String
+  tel        String?
+  email      String?
+  debutBail  String
+  finBail    String
+  debutTs    BigInt
+  finTs      BigInt
+  loyer      Float
+  charges    Float    @default(0)
+  statut     String   @default("En cours")
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+model Alert {
+  id       String @id @default(cuid())
+  type     String
+  title    String
+  detail   String
+  severity String @default("medium")
+}

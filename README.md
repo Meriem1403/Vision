@@ -1,11 +1,39 @@
 
-  # Sans titre
+  # Vision Patrimoine
 
-  This is a code bundle for Sans titre. The original project is available at https://www.figma.com/design/BpWYCknjj08McaKSe5LaV0/Sans-titre.
+  Application de gestion patrimoniale immobilière avec calcul automatique des prêts bancaires.
 
-  ## Running the code
+  ## Fonctionnalités
 
-  Run `npm i` to install the dependencies.
+  - Dashboard patrimonial (comme l'Excel de référence)
+  - Prêts bancaires : saisie minimale (montant, taux, durée, date) → mensualité, CRD, intérêts calculés automatiquement
+  - Cash-flow locatif par bien et par SCI
+  - Stack full-stack dockerisée
 
-  Run `npm run dev` to start the development server.
+  ## Démarrage avec Docker
+
+  ```bash
+  docker compose up --build
+  ```
+
+  | Service   | URL                        |
+  |-----------|----------------------------|
+  | Frontend  | http://localhost:5173      |
+  | Backend   | http://localhost:3001      |
+  | Mailpit   | http://localhost:8025      |
+  | PostgreSQL| localhost:5432             |
+
+  ## Développement local
+
+  ```bash
+  cp .env.example .env
+  cd backend && npm install && npm run db:push && npm run db:seed && npm run dev
+  pnpm install && pnpm dev
+  ```
+
+  ## Running the code (frontend seul)
+
+  Run `pnpm install` to install the dependencies.
+
+  Run `pnpm dev` to start the development server.
   

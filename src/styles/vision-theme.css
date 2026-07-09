@@ -1,0 +1,169 @@
+/* Variables Vision — valeurs par défaut (thème Minuit), surchargées par applyVisionTheme() */
+:root {
+  --v-bg-1: #060c1a;
+  --v-bg-2: #0c0826;
+  --v-bg-3: #060f20;
+  --v-bg-gradient: linear-gradient(135deg, var(--v-bg-1) 0%, var(--v-bg-2) 50%, var(--v-bg-3) 100%);
+  --v-glass-bg: rgba(255, 255, 255, 0.09);
+  --v-glass-border: rgba(255, 255, 255, 0.20);
+  --v-glass-strong: rgba(255, 255, 255, 0.13);
+  --v-glass-border-strong: rgba(255, 255, 255, 0.28);
+  --v-surface: rgba(255, 255, 255, 0.07);
+  --v-surface-strong: rgba(255, 255, 255, 0.11);
+  --v-border-subtle: rgba(255, 255, 255, 0.12);
+  --v-text: #f1f5f9;
+  --v-text-muted: #cbd5e1;
+  --v-text-faint: #94a3b8;
+  --v-accent: #60a5fa;
+  --v-accent-2: #2563eb;
+  --v-accent-glow: rgba(37, 99, 235, 0.40);
+  --v-accent-text: #60a5fa;
+  --v-on-accent: #ffffff;
+  --v-positive: #34d399;
+  --v-positive-text: #6ee7b7;
+  --v-negative: #f87171;
+  --v-negative-text: #fca5a5;
+  --v-warning: #fbbf24;
+  --v-warning-text: #fcd34d;
+  --v-violet: #a78bfa;
+  --v-violet-text: #c4b5fd;
+  --v-info-text: #93c5fd;
+  --v-input-bg: #111d36;
+  --v-input-border: rgba(255, 255, 255, 0.38);
+  --v-placeholder: #94a3b8;
+  --v-tooltip-bg: #0f172a;
+  --v-drawer-from: #0a1020;
+  --v-drawer-to: #0d0824;
+  --v-sidebar-bg: rgba(255, 255, 255, 0.06);
+  --v-sidebar-border: rgba(255, 255, 255, 0.14);
+  --v-header-bg: rgba(255, 255, 255, 0.05);
+  --v-header-border: rgba(255, 255, 255, 0.12);
+  --v-nav-bg: rgba(6, 12, 26, 0.96);
+  --v-nav-active-bg: rgba(255, 255, 255, 0.14);
+  --v-blob-1: rgba(37, 99, 235, 0.11);
+  --v-blob-2: rgba(124, 58, 237, 0.09);
+  --v-blob-3: rgba(6, 182, 212, 0.07);
+  --v-chart-grid: rgba(255, 255, 255, 0.16);
+  --v-chart-axis: #cbd5e1;
+  --v-overlay: rgba(0, 0, 0, 0.60);
+  --v-focus-ring: rgba(96, 165, 250, 0.55);
+}
+
+.vision-app-bg {
+  background: var(--v-bg-gradient);
+  color: var(--v-text);
+}
+
+.vision-glass {
+  background: var(--v-glass-bg);
+  border: 1px solid var(--v-glass-border);
+}
+
+.vision-glass-strong {
+  background: var(--v-glass-strong);
+  border: 1px solid var(--v-glass-border-strong);
+}
+
+.vision-surface { background: var(--v-surface); }
+.vision-surface-strong { background: var(--v-surface-strong); }
+.vision-border { border-color: var(--v-glass-border); }
+.vision-border-subtle { border-color: var(--v-border-subtle); }
+
+.vision-text { color: var(--v-text); }
+.vision-text-muted { color: var(--v-text-muted); }
+.vision-text-faint { color: var(--v-text-faint); }
+.vision-accent-text { color: var(--v-accent-text); }
+.vision-positive-text { color: var(--v-positive-text); }
+.vision-negative-text { color: var(--v-negative-text); }
+.vision-info-text { color: var(--v-info-text); }
+.vision-violet-text { color: var(--v-violet-text); }
+.vision-warning-text { color: var(--v-warning-text); }
+
+.vision-input {
+  background: var(--v-input-bg);
+  border-color: var(--v-input-border);
+  color: var(--v-text);
+}
+
+.vision-input::placeholder {
+  color: var(--v-placeholder);
+  opacity: 1;
+}
+
+.vision-select {
+  background: var(--v-input-bg);
+  border-color: var(--v-input-border);
+  color: var(--v-text);
+}
+
+.vision-nav-active {
+  background: var(--v-nav-active-bg);
+  color: var(--v-text);
+  border: 1px solid var(--v-glass-border);
+}
+
+.vision-nav-idle {
+  color: var(--v-text-muted);
+  border: 1px solid transparent;
+}
+
+.vision-nav-idle:hover {
+  color: var(--v-text);
+}
+
+.vision-kpi-label {
+  color: var(--v-text-muted);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+}
+
+.vision-table-head {
+  color: var(--v-text-muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.vision-row-hover:hover {
+  background: var(--v-surface);
+}
+
+.vision-progress-track {
+  background: var(--v-surface-strong);
+}
+
+.vision-chip-active {
+  background: var(--v-nav-active-bg);
+  color: var(--v-text);
+  border: 1px solid var(--v-glass-border);
+}
+
+.vision-chip-idle {
+  color: var(--v-text-muted);
+  border: 1px solid var(--v-border-subtle);
+}
+
+.vision-chip-idle:hover {
+  background: var(--v-surface);
+  color: var(--v-text);
+}
+
+/* Focus visible — WCAG 2.4.7 */
+.vision-app-bg :focus-visible {
+  outline: 2px solid var(--v-accent);
+  outline-offset: 2px;
+}
+
+.vision-app-bg button:focus:not(:focus-visible),
+.vision-app-bg a:focus:not(:focus-visible) {
+  outline: none;
+}
+
+[data-vision-theme="aube"] select option,
+[data-vision-theme="custom"][data-vision-light="true"] select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
