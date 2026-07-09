@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vision-db
+    environment:
+      POSTGRES_USER: vision
+      POSTGRES_PASSWORD: vision
+      POSTGRES_DB: vision
+    volumes:
+      - vision_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vision -d vision"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: vision-mail
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: vision-backend
+    environment:
+      DATABASE_URL: postgresql://vision:vision@db:5432/vision
+      PORT: 3001
+      HOST: 0.0.0.0
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: vision@localhost
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+    container_name: vision-frontend
+    environment:
+      VITE_API_URL: http://localhost:3001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./src:/app/src
+      - ./index.html:/app/index.html
+      - ./vite.config.ts:/app/vite.config.ts
+
+volumes:
+  vision_pg_data:

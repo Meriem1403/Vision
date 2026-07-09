@@ -1,3 +1,39 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+@import './vision-theme.css';
+
+/* Accessibilité : selects natifs lisibles sur fond sombre */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #0d1630;
+  color: #ffffff;
+}
+
+/* Pages complètes — scroll horizontal fluide sur mobile */
+.full-page-table-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.recharts-tooltip-wrapper {
+  z-index: 50 !important;
+  pointer-events: none;
+}
+
+.recharts-default-tooltip {
+  background-color: #0a1020 !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  border-radius: 12px !important;
+  color: #ffffff !important;
+}
+
+.recharts-tooltip-item,
+.recharts-tooltip-label {
+  color: #ffffff !important;
+}
+
