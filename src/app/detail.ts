@@ -1,4 +1,14 @@
-export type View = "dashboard" | "sci" | "biens" | "credits" | "location" | "comptabilite" | "patrimoine" | "alertes";
+export type View =
+  | "dashboard"
+  | "sci"
+  | "biens"
+  | "credits"
+  | "location"
+  | "comptabilite"
+  | "patrimoine"
+  | "alertes"
+  | "dossiers"
+  | "portail-banque";
 
 export type DetailTarget =
   | { kind: "property"; id: string; section?: "property" | "credit" }
@@ -16,4 +26,6 @@ export const FULL_PAGE_BACK: Record<View, string> = {
   comptabilite: "Retour à la comptabilité",
   patrimoine: "Retour au patrimoine",
   alertes: "Retour aux alertes",
+  dossiers: "Retour aux dossiers",
+  "portail-banque": "Retour au portail",
 };

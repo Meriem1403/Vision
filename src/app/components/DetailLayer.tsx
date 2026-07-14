@@ -12,7 +12,11 @@ import type { DetailTarget, View } from "@/app/detail";
 import { FULL_PAGE_BACK } from "@/app/detail";
 import type { AlertItem, Property, SCI, Tenant } from "./entityTypes";
 
-const sciOf = (p: Property, scis: SCI[]) => scis.find((s) => s.id === p.sciId) ?? scis[0];
+const FALLBACK_SCI: SCI = {
+  id: "_fallback", name: "Entité", shortName: "—", type: "IR", creation: "", valeurEstimee: 0,
+  associes: [], color: "#60a5fa", gradient: "from-blue-500/20 to-transparent",
+};
+const sciOf = (p: Property, scis: SCI[]) => scis.find((s) => s.id === p.sciId) ?? scis[0] ?? FALLBACK_SCI;
 
 function drawerMeta(target: DetailTarget, ctx: {
   properties: Property[];
@@ -81,7 +85,7 @@ function DrawerBody({ target, ctx, onPropertyCredit, onOpenFullPage }: {
       const t = tenants.find((x) => x.id === target.id);
       if (!t) return null;
       const p = properties.find((x) => x.id === t.propertyId);
-      const sci = p ? sciOf(p, scis) : scis[0];
+      const sci = p ? sciOf(p, scis) : (scis[0] ?? FALLBACK_SCI);
       return <TenantDetailContent tenant={t} property={p} sci={sci} />;
     }
     case "alert": {
@@ -135,7 +139,7 @@ export function FullPageDetail({ target, view, ctx, section, onSectionChange, on
       const t = tenants.find((x) => x.id === target.id);
       if (!t) return null;
       const p = properties.find((x) => x.id === t.propertyId);
-      const sci = p ? sciOf(p, scis) : scis[0];
+      const sci = p ? sciOf(p, scis) : (scis[0] ?? FALLBACK_SCI);
       return <TenantDetailPage tenant={t} property={p} sci={sci} backLabel={backLabel} onBack={onBack} />;
     }
     case "alert": {

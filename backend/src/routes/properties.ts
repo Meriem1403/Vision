@@ -1,6 +1,8 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { computeLoanSummary } from "../services/loanEngine.js";
+import { requireAuth } from "../lib/auth.js";
+import { entityAccessible } from "../lib/permissions.js";
 
 const propertySchema = z.object({
   entityId: z.string(),
@@ -28,15 +30,21 @@ const propertySchema = z.object({
 });
 
 export async function propertyRoutes(app: FastifyInstance) {
-  app.get("/api/properties", async () => {
+  app.get("/api/properties", { preHandler: requireAuth() }, async (req) => {
     const properties = await app.prisma.property.findMany({
-      include: { entity: true, loan: true },
+      include: { entity: { include: { shareholders: true } }, loan: true },
       orderBy: { address: "asc" },
     });
-    return properties.map(formatProperty);
+
+    const filtered = properties.filter((p) => {
+      if (req.user!.role === "BANQUE") return false;
+      return entityAccessible(req.user!, p.entity.shareholders);
+    });
+
+    return filtered.map(formatProperty);
   });
 
-  app.post("/api/properties", async (req, reply) => {
+  app.post("/api/properties", { preHandler: requireAuth(["GERANT"]) }, async (req, reply) => {
     const body = propertySchema.parse(req.body);
     const entity = await app.prisma.legalEntity.findUnique({ where: { slug: body.entityId } });
     if (!entity) return reply.status(400).send({ error: "Entité introuvable" });
@@ -103,7 +111,7 @@ export async function propertyRoutes(app: FastifyInstance) {
     return formatProperty(full!);
   });
 
-  app.put("/api/properties/:id", async (req, reply) => {
+  app.put("/api/properties/:id", { preHandler: requireAuth(["GERANT"]) }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = propertySchema.parse(req.body);
     const entity = await app.prisma.legalEntity.findUnique({ where: { slug: body.entityId } });
@@ -203,7 +211,7 @@ export async function propertyRoutes(app: FastifyInstance) {
     return formatProperty(full!);
   });
 
-  app.delete("/api/properties/:id", async (req) => {
+  app.delete("/api/properties/:id", { preHandler: requireAuth(["GERANT"]) }, async (req) => {
     const { id } = req.params as { id: string };
     await app.prisma.property.delete({ where: { id } });
     return { ok: true };
