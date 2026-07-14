@@ -11,11 +11,14 @@ import {
   TrendingUp, Bell, Plus, ArrowUpRight, ArrowDownRight, Pencil,
   Trash2, Check, X, ChevronLeft, Phone, Mail, MapPin, Calendar,
   Shield, Key, AlertTriangle, Euro, BarChart2, Menu, LayoutGrid,
-  List, Eye, ChevronDown, Maximize2, Palette,
+  List, Eye, ChevronDown, Maximize2, Palette, LogOut, Banknote, Landmark,
 } from "lucide-react";
 import { AppDetailDrawer, FullPageDetail, fullPageHeaderTitle, fullPageHeaderSubtitle } from "@/app/components/DetailLayer";
-import type { DetailTarget, View } from "@/app/detail";
+import type { DetailTarget } from "@/app/detail";
 import { VisionPatrimoinePanel } from "@/app/components/VisionPatrimoine";
+import { LoginPage } from "@/app/components/LoginPage";
+import { BankDossierView } from "@/app/components/BankDossierView";
+import { BankPortalView } from "@/app/components/BankPortalView";
 import { BrandLogo } from "@/app/components/BrandLogo";
 import { ThemeSettings, ThemeSettingsModal } from "@/app/components/ThemeSettings";
 import {
@@ -24,7 +27,12 @@ import {
 import { ChartTooltipContent, chartAxisTick, chartGridStroke } from "@/app/components/ChartTooltip";
 import { MetricLabel } from "@/app/components/MetricWithFormula";
 import { TooltipProvider } from "@/app/components/ui/tooltip";
-import { greetingLabel, SESSION_USER } from "@/lib/sessionUser";
+import type { AuthUser } from "@/lib/auth";
+import { clearSession, getStoredToken, getStoredUser, greetingLabel, roleLabel, storeSession } from "@/lib/auth";
+import {
+  canAccessView, canManageData, defaultViewForRole, filterProperties, filterScisWithProperties,
+  PAGE_TITLES, type View,
+} from "@/lib/permissions";
 import {
   applyVisionTheme, loadThemeId, loadCustomColors, getPresetVars, customToVars,
   type CustomThemeColors,
@@ -127,7 +135,11 @@ function LoanCalcSummary({ credit }: { credit: Pick<Credit, "montantInitial" | "
     </div>
   );
 }
-const sciOf = (p: Property, scis: SCI[]) => scis.find((s) => s.id === p.sciId) ?? scis[0];
+const FALLBACK_SCI: SCI = {
+  id: "_fallback", name: "Entité", shortName: "—", type: "IR", creation: "", valeurEstimee: 0,
+  associes: [], color: "#60a5fa", gradient: "from-blue-500/20 to-transparent",
+};
+const sciOf = (p: Property, scis: SCI[]) => scis.find((s) => s.id === p.sciId) ?? scis[0] ?? FALLBACK_SCI;
 const leasePct = (t: Tenant) => { const now = Date.now(); if (now >= t.finTs) return 100; if (now <= t.debutTs) return 0; return Math.round(((now - t.debutTs) / (t.finTs - t.debutTs)) * 100); };
 
 // ─── MOTION ──────────────────────────────────────────────────────────────────
@@ -211,7 +223,7 @@ function DashboardView({ properties, scis, onSelectProperty }: { properties: Pro
     { l: "Patrimoine net", v: fmt(totalBrut - totalDette), color: "#34d399", Icon: TrendingUp },
     { l: "Loyers annuels", v: fmt(loyers), color: "#a78bfa", Icon: Euro },
     { l: "Cash-flow / mois", v: `${cf >= 0 ? "+" : ""}${fmt(cf)}`, color: "#34d399", Icon: ArrowUpRight },
-    { l: "Rendement brut", v: `${(loyers / totalBrut * 100).toFixed(2)} %`, color: "#fbbf24", Icon: BarChart2 },
+    { l: "Rendement brut", v: totalBrut > 0 ? `${(loyers / totalBrut * 100).toFixed(2)} %` : "—", color: "#fbbf24", Icon: BarChart2 },
   ];
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5 lg:space-y-6`}>
@@ -685,7 +697,7 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
       <motion.div variants={gridV} initial="hidden" animate="show" className={cardsGrid}>
         {tenants.map((t) => {
           const prop = properties.find((p) => p.id === t.propertyId)!;
-          const sci = prop ? sciOf(prop, scis) : scis[0];
+          const sci = prop ? sciOf(prop, scis) : (scis[0] ?? FALLBACK_SCI);
           const pct = leasePct(t);
           const ss = statStyle[t.statut];
           return (
@@ -897,19 +909,22 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-const NAV = [
-  { id: "dashboard" as View, label: "Dashboard", Icon: LayoutDashboard },
-  { id: "sci" as View, label: "SCI", Icon: Building2 },
-  { id: "biens" as View, label: "Biens", Icon: Home },
-  { id: "credits" as View, label: "Crédits", Icon: CreditCard },
-  { id: "location" as View, label: "Locataires", Icon: Users },
-  { id: "comptabilite" as View, label: "Comptabilité", Icon: FileText },
-  { id: "patrimoine" as View, label: "Patrimoine", Icon: TrendingUp },
-  { id: "alertes" as View, label: "Alertes", Icon: Bell },
+const ALL_NAV: { id: View; label: string; Icon: typeof LayoutDashboard }[] = [
+  { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { id: "sci", label: "SCI", Icon: Building2 },
+  { id: "biens", label: "Biens", Icon: Home },
+  { id: "credits", label: "Crédits", Icon: CreditCard },
+  { id: "location", label: "Locataires", Icon: Users },
+  { id: "comptabilite", label: "Comptabilité", Icon: FileText },
+  { id: "patrimoine", label: "Patrimoine", Icon: TrendingUp },
+  { id: "dossiers", label: "Dossiers banque", Icon: Banknote },
+  { id: "portail-banque", label: "Portail banque", Icon: Landmark },
+  { id: "alertes", label: "Alertes", Icon: Bell },
 ];
-const PAGE_TITLES: Record<View, string> = { dashboard: "Tableau de bord", sci: "SCI & Entités", biens: "Biens immobiliers", credits: "Crédits & Emprunts", location: "Gestion locative", comptabilite: "Comptabilité", patrimoine: "Évolution patrimoniale", alertes: "Alertes" };
 
 export default function App() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredUser());
+  const [authChecked, setAuthChecked] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [properties, setProperties] = useState<Property[]>(PROPS_INIT);
   const [scis, setScis] = useState<SCI[]>(SCIS_INIT);
@@ -924,7 +939,26 @@ export default function App() {
   const [fullPageTarget, setFullPageTarget] = useState<DetailTarget | null>(null);
   const [propertySection, setPropertySection] = useState<"property" | "credit">("property");
 
-  const detailCtx = { properties, scis, tenants, alerts };
+  const navItems = useMemo(
+    () => (authUser ? ALL_NAV.filter((n) => canAccessView(authUser, n.id)) : []),
+    [authUser],
+  );
+
+  const visibleProperties = useMemo(
+    () => (authUser ? filterProperties(authUser, properties, scis) : []),
+    [authUser, properties, scis],
+  );
+  const visibleScis = useMemo(
+    () => (authUser ? filterScisWithProperties(authUser, scis, visibleProperties) : []),
+    [authUser, scis, visibleProperties],
+  );
+  const visibleTenants = useMemo(() => {
+    if (!authUser) return [];
+    const propIds = new Set(visibleProperties.map((p) => p.id));
+    return tenants.filter((t) => propIds.has(t.propertyId));
+  }, [authUser, tenants, visibleProperties]);
+
+  const detailCtx = { properties: visibleProperties, scis: visibleScis, tenants: visibleTenants, alerts };
   const openDrawer = (target: DetailTarget) => {
     setDrawerTarget(target);
     if (target.kind === "property") setPropertySection(target.section ?? "property");
@@ -970,6 +1004,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const token = getStoredToken();
+    if (!token) {
+      setAuthChecked(true);
+      return;
+    }
+    api.me()
+      .then(({ user }) => {
+        setAuthUser(user);
+        storeSession(token, user);
+        setView((v) => (canAccessView(user, v) ? v : defaultViewForRole(user.role)));
+      })
+      .catch(() => {
+        clearSession();
+        setAuthUser(null);
+      })
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) return;
     isApiAvailable().then(async (online) => {
       setApiOnline(online);
       if (!online) return;
@@ -1012,7 +1066,28 @@ export default function App() {
         setApiOnline(false);
       }
     });
-  }, []);
+  }, [authUser]);
+
+  const handleLogin = (user: AuthUser) => {
+    setAuthUser(user);
+    setView(defaultViewForRole(user.role));
+    closeFullPage();
+    closeDrawer();
+  };
+
+  useEffect(() => {
+    if (!authUser) return;
+    setView((v) => (canAccessView(authUser, v) ? v : defaultViewForRole(authUser.role)));
+  }, [authUser]);
+
+  const handleLogout = async () => {
+    await api.logout().catch(() => {});
+    clearSession();
+    setAuthUser(null);
+    setView("dashboard");
+    closeFullPage();
+    closeDrawer();
+  };
 
   const addProp = (p: Property) => {
     setProperties((ps) => [...ps, p]);
@@ -1073,6 +1148,27 @@ export default function App() {
   const highAlerts = alerts.filter((a) => a.severity === "high").length;
   const handleNav = (v: View) => { setView(v); setSidebarOpen(false); closeFullPage(); closeDrawer(); };
 
+  const bankLoans = useMemo(
+    () =>
+      visibleProperties
+        .filter((p) => p.credit)
+        .map((p) => ({
+          banque: p.credit!.banque,
+          capitalRestant: p.credit!.capitalRestant,
+          mensualite: p.credit!.mensualite,
+          propertyAddress: `${p.address}, ${p.ville}`,
+        })),
+    [visibleProperties],
+  );
+
+  if (!authChecked) {
+    return <div className="min-h-dvh vision-app-bg flex items-center justify-center vision-text-muted text-sm">Chargement…</div>;
+  }
+
+  if (!authUser) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   return (
     <TooltipProvider delayDuration={200}>
     <div className="h-dvh min-h-0 flex overflow-hidden vision-app-bg">
@@ -1099,7 +1195,7 @@ export default function App() {
           <button onClick={() => setSidebarOpen(false)} className="xl:hidden w-9 h-9 min-h-[44px] rounded-lg vision-glass flex items-center justify-center vision-text-muted"><X size={18} /></button>
         </div>
         <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-          {NAV.map(({ id, label, Icon }) => {
+          {navItems.map(({ id, label, Icon }) => {
             const active = view === id;
             return (
               <motion.button key={id} onClick={() => handleNav(id)} whileHover={!active ? { x: 3 } : {}} whileTap={{ scale: 0.97 }}
@@ -1113,7 +1209,16 @@ export default function App() {
         </nav>
         <ThemeSettings themeId={themeId} customColors={customColors} onThemeChange={handleThemeChange} onCustomChange={handleCustomChange} />
         <div className="px-4 py-4" style={{ borderTop: "1px solid var(--v-sidebar-border)" }}>
-          <div className="flex items-center gap-3"><Ava initiales={SESSION_USER.initials} color="var(--v-accent)" size={36} /><div><p className="vision-text text-sm font-semibold">{SESSION_USER.name}</p><p className="text-xs vision-text-faint">{SESSION_USER.role}</p></div></div>
+          <div className="flex items-center gap-3">
+            <Ava initiales={authUser.initials} color="var(--v-accent)" size={36} />
+            <div className="flex-1 min-w-0">
+              <p className="vision-text text-sm font-semibold truncate">{authUser.name}</p>
+              <p className="text-xs vision-text-faint">{roleLabel(authUser.role)}</p>
+            </div>
+            <button type="button" onClick={handleLogout} className="w-9 h-9 rounded-lg vision-glass flex items-center justify-center vision-text-muted hover:vision-text transition-colors" title="Déconnexion">
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1127,16 +1232,16 @@ export default function App() {
                 {fullPageTarget
                   ? fullPageHeaderTitle(fullPageTarget, detailCtx, PAGE_TITLES[view])
                   : view === "dashboard"
-                    ? `${greetingLabel()}, ${SESSION_USER.firstName}`
+                    ? `${greetingLabel()}, ${authUser.firstName}`
                     : PAGE_TITLES[view]}
               </h1>
               <p className="text-xs sm:text-sm mt-0.5 vision-text-faint sm:block">
                 {fullPageTarget
                   ? <span className="hidden sm:inline">{fullPageHeaderSubtitle(fullPageTarget, view, detailCtx)}</span>
                   : <>
-                      <span className="sm:hidden">{view === "dashboard" ? new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : `${greetingLabel()}, ${SESSION_USER.firstName}`}</span>
+                      <span className="sm:hidden">{view === "dashboard" ? new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : `${greetingLabel()}, ${authUser.firstName}`}</span>
                       <span className="hidden sm:inline">
-                        {view !== "dashboard" && <>{greetingLabel()}, {SESSION_USER.firstName} · </>}
+                        {view !== "dashboard" && <>{greetingLabel()}, {authUser.firstName} · </>}
                         {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                       </span>
                     </>}
@@ -1170,14 +1275,16 @@ export default function App() {
                 />
               ) : (
                 <>
-              {view === "dashboard" && <DashboardView properties={properties} scis={scis} onSelectProperty={(id) => openPropertyDrawer(id)} />}
-              {view === "sci" && <SCIView scis={scis} properties={properties} onAdd={addSCI} onUpdate={updSCI} onDelete={delSCI} onSelectSci={(id) => openDrawer({ kind: "sci", id })} onOpenFullPage={(id) => openFullPage({ kind: "sci", id })} />}
-              {view === "biens" && <BiensView properties={properties} scis={scis} onAdd={addProp} onUpdate={updProp} onDelete={delProp} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
-              {view === "credits" && <CreditsView properties={properties} scis={scis} onUpdateProperty={updProp} onSelectCredit={(id) => openPropertyDrawer(id, true)} onOpenFullPage={(id) => openPropertyFullPage(id, "credit")} />}
-              {view === "location" && <LocationView tenants={tenants} properties={properties} scis={scis} onAdd={addTenant} onUpdate={updTenant} onDelete={delTenant} onSelectTenant={(id) => openDrawer({ kind: "tenant", id })} onOpenFullPage={(id) => openFullPage({ kind: "tenant", id })} />}
-              {view === "comptabilite" && <ComptabiliteView properties={properties} scis={scis} onSelectSci={(id) => openDrawer({ kind: "compta", sciId: id })} onOpenFullPage={(id) => openFullPage({ kind: "compta", sciId: id })} />}
-              {view === "patrimoine" && <PatrimoineView properties={properties} scis={scis} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
-              {view === "alertes" && <AlertesView alerts={alerts} onDelete={delAlert} onSelectAlert={(id) => openDrawer({ kind: "alert", id })} onOpenFullPage={(id) => openFullPage({ kind: "alert", id })} />}
+              {view === "dashboard" && <DashboardView properties={visibleProperties} scis={visibleScis} onSelectProperty={(id) => openPropertyDrawer(id)} />}
+              {view === "sci" && <SCIView scis={visibleScis} properties={visibleProperties} onAdd={canManageData(authUser) ? addSCI : () => {}} onUpdate={canManageData(authUser) ? updSCI : () => {}} onDelete={canManageData(authUser) ? delSCI : () => {}} onSelectSci={(id) => openDrawer({ kind: "sci", id })} onOpenFullPage={(id) => openFullPage({ kind: "sci", id })} />}
+              {view === "biens" && <BiensView properties={visibleProperties} scis={visibleScis} onAdd={canManageData(authUser) ? addProp : () => {}} onUpdate={canManageData(authUser) ? updProp : () => {}} onDelete={canManageData(authUser) ? delProp : () => {}} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
+              {view === "credits" && <CreditsView properties={visibleProperties} scis={visibleScis} onUpdateProperty={canManageData(authUser) ? updProp : () => {}} onSelectCredit={(id) => openPropertyDrawer(id, true)} onOpenFullPage={(id) => openPropertyFullPage(id, "credit")} />}
+              {view === "location" && canAccessView(authUser, "location") && <LocationView tenants={visibleTenants} properties={visibleProperties} scis={visibleScis} onAdd={canManageData(authUser) ? addTenant : () => {}} onUpdate={canManageData(authUser) ? updTenant : () => {}} onDelete={canManageData(authUser) ? delTenant : () => {}} onSelectTenant={(id) => openDrawer({ kind: "tenant", id })} onOpenFullPage={(id) => openFullPage({ kind: "tenant", id })} />}
+              {view === "comptabilite" && canAccessView(authUser, "comptabilite") && <ComptabiliteView properties={visibleProperties} scis={visibleScis} onSelectSci={(id) => openDrawer({ kind: "compta", sciId: id })} onOpenFullPage={(id) => openFullPage({ kind: "compta", sciId: id })} />}
+              {view === "patrimoine" && <PatrimoineView properties={visibleProperties} scis={visibleScis} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
+              {view === "dossiers" && canAccessView(authUser, "dossiers") && <BankDossierView entityOptions={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName }))} />}
+              {view === "portail-banque" && canAccessView(authUser, "portail-banque") && <BankPortalView user={authUser} loans={bankLoans} />}
+              {view === "alertes" && <AlertesView alerts={alerts} onDelete={canManageData(authUser) ? delAlert : () => {}} onSelectAlert={(id) => openDrawer({ kind: "alert", id })} onOpenFullPage={(id) => openFullPage({ kind: "alert", id })} />}
                 </>
               )}
             </motion.div>
@@ -1190,7 +1297,7 @@ export default function App() {
           style={{ background: "var(--v-nav-bg)", borderTop: "1px solid var(--v-glass-border)", backdropFilter: "blur(20px)" }}
           aria-label="Navigation principale"
         >
-          {NAV.slice(0, 5).map(({ id, label, Icon }) => {
+          {navItems.slice(0, 5).map(({ id, label, Icon }) => {
             const active = view === id;
             return (
               <motion.button key={id} onClick={() => handleNav(id)} whileTap={{ scale: 0.88 }} className="flex-1 flex flex-col items-center gap-1 py-2.5 min-h-[56px] transition-colors" style={{ color: active ? "var(--v-accent)" : "var(--v-text-faint)" }}>

@@ -120,3 +120,73 @@ model Alert {
   detail   String
   severity String @default("medium")
 }
+
+enum UserRole {
+  GERANT
+  ASSOCIE
+  BANQUE
+}
+
+model User {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  name            String
+  firstName       String
+  initials        String
+  role            UserRole
+  passwordHash    String
+  bankName        String?
+  shareholderName String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  sessions        Session[]
+  dossiers        BankDossier[] @relation("DossierCreator")
+
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+enum DossierStatus {
+  DRAFT
+  SENT
+  VIEWED
+  EXPIRED
+}
+
+model BankDossier {
+  id          String        @id @default(cuid())
+  reference   String        @unique
+  title       String
+  targetBank  String
+  status      DossierStatus @default(DRAFT)
+  message     String?
+  montantDemande Float?
+  objet       String?
+  entitySlugs String[]
+  includePatrimoine Boolean   @default(true)
+  includeEndettement Boolean  @default(true)
+  includeCashFlow   Boolean  @default(true)
+  anonymizeTenants  Boolean  @default(true)
+  payload     Json
+  createdById String
+  expiresAt   DateTime?
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdBy   User          @relation("DossierCreator", fields: [createdById], references: [id])
+
+  @@index([targetBank, status])
+  @@index([createdById])
+}

@@ -1,13 +1,17 @@
 import { FastifyInstance } from "fastify";
+import { requireAuth } from "../lib/auth.js";
+import { entityAccessible } from "../lib/permissions.js";
 
 export async function entityRoutes(app: FastifyInstance) {
-  app.get("/api/entities", async () => {
+  app.get("/api/entities", { preHandler: requireAuth() }, async (req) => {
     const entities = await app.prisma.legalEntity.findMany({
       include: { shareholders: true, properties: { include: { loan: true } } },
       orderBy: { name: "asc" },
     });
 
-    return entities.map((e) => ({
+    const filtered = entities.filter((e) => entityAccessible(req.user!, e.shareholders));
+
+    return filtered.map((e) => ({
       id: e.slug,
       name: e.name,
       shortName: e.shortName,
@@ -22,7 +26,7 @@ export async function entityRoutes(app: FastifyInstance) {
     }));
   });
 
-  app.get("/api/entities/:slug/snapshot", async (req, reply) => {
+  app.get("/api/entities/:slug/snapshot", { preHandler: requireAuth() }, async (req, reply) => {
     const { slug } = req.params as { slug: string };
     const month = Number((req.query as { month?: string }).month ?? new Date().getMonth() + 1);
     const year = Number((req.query as { year?: string }).year ?? new Date().getFullYear());
@@ -35,6 +39,9 @@ export async function entityRoutes(app: FastifyInstance) {
       },
     });
     if (!entity) return reply.status(404).send({ error: "Entité introuvable" });
+    if (!entityAccessible(req.user!, entity.shareholders)) {
+      return reply.status(403).send({ error: "Accès refusé à cette entité" });
+    }
 
     const projection = new Date(year, month - 1, 1);
     const lines = entity.properties.map((p) => {

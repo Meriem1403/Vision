@@ -1,7 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 import { computeLoanSummary } from "../src/services/loanEngine.js";
+import { hashPassword } from "../src/lib/auth.js";
 
 const prisma = new PrismaClient();
+
+const USERS = [
+  { email: "johann@vision.local", name: "Johann Faraut", firstName: "Johann", initials: "JF", role: "GERANT" as const, password: "vision" },
+  { email: "alexandre@vision.local", name: "Alexandre Niel", firstName: "Alexandre", initials: "AN", role: "ASSOCIE" as const, shareholderName: "Alexandre Niel", password: "vision" },
+  { email: "ca@bank.local", name: "Crédit Agricole", firstName: "CA", initials: "CA", role: "BANQUE" as const, bankName: "Crédit Agricole", password: "vision" },
+  { email: "lcl@bank.local", name: "LCL", firstName: "LCL", initials: "LC", role: "BANQUE" as const, bankName: "LCL", password: "vision" },
+  { email: "bnp@bank.local", name: "BNP Paribas", firstName: "BNP", initials: "BN", role: "BANQUE" as const, bankName: "BNP Paribas", password: "vision" },
+  { email: "sg@bank.local", name: "Société Générale", firstName: "SG", initials: "SG", role: "BANQUE" as const, bankName: "Société Générale", password: "vision" },
+];
 
 const ENTITIES = [
   { slug: "beneduc", name: "SCI IR BENEDUC", shortName: "BENEDUC", type: "IR", creation: "Janv. 2017", valeurEstimee: 380000, color: "#60a5fa", gradient: "from-blue-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 50 }, { name: "Alexandre Niel", parts: 50 }] },
@@ -24,6 +34,9 @@ const PROPERTIES = [
 ];
 
 async function main() {
+  await prisma.session.deleteMany();
+  await prisma.bankDossier.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.amortizationEntry.deleteMany();
   await prisma.loan.deleteMany();
   await prisma.tenant.deleteMany();
@@ -113,6 +126,21 @@ async function main() {
       { type: "taxe", title: "Taxe foncière à régler", detail: "SCI TROIKA · Octobre 2026", severity: "medium" },
     ],
   });
+
+  for (const u of USERS) {
+    await prisma.user.create({
+      data: {
+        email: u.email,
+        name: u.name,
+        firstName: u.firstName,
+        initials: u.initials,
+        role: u.role,
+        passwordHash: hashPassword(u.password),
+        bankName: "bankName" in u ? u.bankName : null,
+        shareholderName: "shareholderName" in u ? u.shareholderName : null,
+      },
+    });
+  }
 
   console.log("Seed terminé.");
 }
