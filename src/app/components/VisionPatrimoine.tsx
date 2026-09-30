@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { getCrdAtDate } from "@/lib/loanCalculator";
+import { getCrdAtDate, hasAmortizationInputs, projectImportedCrd } from "@/lib/loanCalculator";
 import { pageWrap, pageEndSpacer, G, lbl } from "./layout";
 import { GSelect, monthOptions, yearOptions } from "./GSelect";
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 const fmtD = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
 
+/** Dates auxquelles le CRD Excel (colonne F) a été figé dans le seed. */
 const DEFAULT_PROJECTION: Record<string, { month: number; year: number }> = {
   beneduc: { month: 3, year: 2026 },
   troika: { month: 10, year: 2025 },
@@ -21,7 +22,17 @@ function shareRatioFromAssocies(sci: SCI, shareholderName?: string | null): numb
   return total > 0 ? mine / total : 0;
 }
 
-interface Credit { montantInitial: number; taux: number; duree: number; debut: string; assuranceMensuelle?: number; mensualite: number; capitalRestant: number; banque?: string }
+interface Credit {
+  montantInitial: number;
+  taux: number;
+  duree: number;
+  debut: string;
+  assuranceMensuelle?: number;
+  mensualite: number;
+  capitalRestant: number;
+  banque?: string;
+  finCredit?: string | null;
+}
 interface Property { id: string; sciId: string; address: string; type: string; lots: number; loyer: number; taxeFonciere: number; valeurActuelle: number; credit?: Credit }
 interface SCI {
   id: string;
@@ -38,9 +49,39 @@ function excelCash(p: Property) {
 }
 
 function finCreditLabel(c: Credit) {
-  const d = new Date(c.debut);
-  d.setMonth(d.getMonth() + c.duree);
-  return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+  if (c.finCredit) {
+    const d = new Date(c.finCredit);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+    }
+  }
+  if (c.debut && c.duree) {
+    const d = new Date(c.debut);
+    d.setMonth(d.getMonth() + c.duree);
+    return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+  }
+  return "—";
+}
+
+function projectedCrd(credit: Credit, projection: Date, refDate: Date): number {
+  if (hasAmortizationInputs(credit)) {
+    return getCrdAtDate(
+      {
+        montantInitial: credit.montantInitial,
+        tauxAnnuel: credit.taux,
+        dureeMois: credit.duree,
+        dateDebut: credit.debut,
+        assuranceMensuelle: credit.assuranceMensuelle,
+      },
+      projection,
+    );
+  }
+  return projectImportedCrd({
+    capitalAtRef: credit.capitalRestant,
+    refDate,
+    projectionDate: projection,
+    finCredit: credit.finCredit,
+  });
 }
 
 function PropertyMobileCard({ line, onSelect }: { line: { p: Property; crdRef: number; crdProj: number; mensualite: number; cash: number }; onSelect: () => void }) {
@@ -71,17 +112,12 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
   const [month, setMonth] = useState(defaults.month);
   const [year, setYear] = useState(defaults.year);
   const projection = new Date(year, month - 1, 1);
+  const refDate = new Date(defaults.year, defaults.month - 1, 1);
 
   const lines = properties.map((p) => {
     const crdRef = p.credit?.montantInitial ?? 0;
-    const crdProj = p.credit
-      ? getCrdAtDate({ montantInitial: p.credit.montantInitial, tauxAnnuel: p.credit.taux, dureeMois: p.credit.duree, dateDebut: p.credit.debut, assuranceMensuelle: p.credit.assuranceMensuelle }, projection)
-      : 0;
-    // Si pas de tableau amort (import Excel: taux/durée/début absents), garder le CRD stocké
-    const crdFinal = p.credit && (!p.credit.taux || !p.credit.duree || !p.credit.debut)
-      ? (p.credit.capitalRestant ?? crdRef)
-      : crdProj;
-    return { p, crdRef, crdProj: crdFinal, mensualite: p.credit?.mensualite ?? 0, cash: excelCash(p) };
+    const crdProj = p.credit ? projectedCrd(p.credit, projection, refDate) : 0;
+    return { p, crdRef, crdProj, mensualite: p.credit?.mensualite ?? 0, cash: excelCash(p) };
   });
 
   const totals = {

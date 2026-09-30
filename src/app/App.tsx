@@ -43,7 +43,7 @@ import {
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
 interface Associe { name: string; parts: number }
-interface Credit { banque: string; montantInitial: number; taux: number; duree: number; debut: string; assuranceMensuelle?: number; mensualite: number; capitalRestant: number }
+interface Credit { banque: string; montantInitial: number; taux: number; duree: number; debut: string; assuranceMensuelle?: number; mensualite: number; capitalRestant: number; finCredit?: string | null }
 interface Property { id: string; sciId: string; address: string; ville: string; cp: string; type: string; surface: number; lots: number; prixAchat: number; travaux: number; fraisNotaire: number; valeurActuelle: number; loyer: number; taxeFonciere: number; assurance: number; credit?: Credit }
 interface SCI { id: string; name: string; shortName: string; type: "IR" | "IS" | "RP"; creation: string; valeurEstimee: number; associes: Associe[]; color: string; gradient: string }
 interface Tenant { id: string; propertyId: string; nom: string; initiales: string; tel: string; email: string; debutBail: string; finBail: string; debutTs: number; finTs: number; loyer: number; charges: number; statut: "En cours" | "Impayé" | "Terminé" }
@@ -100,6 +100,12 @@ const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", c
 const uid = () => `id_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const cashFlow = (p: Property) => Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - p.assurance / 12);
 const finCredit = (c: Credit) => {
+  if (c.finCredit) {
+    const d = new Date(c.finCredit);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    }
+  }
   if (!c.debut || !c.duree) return "—";
   const summary = computeLoanSummary({ montantInitial: c.montantInitial, tauxAnnuel: c.taux, dureeMois: c.duree, dateDebut: c.debut, assuranceMensuelle: c.assuranceMensuelle });
   return summary.finCredit.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });

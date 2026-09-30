@@ -132,6 +132,63 @@ export function getCrdAtDate(input: LoanInput, date: Date): number {
   return getCrdAtDateFromRows(schedule, input.montantInitial, target);
 }
 
+/** Nombre de mois calendaires entre deux 1ers du mois (peut être négatif). */
+export function monthsBetween(from: Date, to: Date): number {
+  const a = new Date(from.getFullYear(), from.getMonth(), 1);
+  const b = new Date(to.getFullYear(), to.getMonth(), 1);
+  return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+}
+
+/**
+ * CRD projeté pour un crédit importé Excel (souvent sans taux/durée/début).
+ * On connaît le CRD à une date de référence (snapshot Excel) et la fin de prêt :
+ * projection linéaire sur le capital restant jusqu’à la fin.
+ */
+export function projectImportedCrd(opts: {
+  capitalAtRef: number;
+  refDate: Date;
+  projectionDate: Date;
+  finCredit?: string | Date | null;
+}): number {
+  const capitalAtRef = Math.max(0, opts.capitalAtRef || 0);
+  if (capitalAtRef <= 0) return 0;
+
+  const proj = new Date(opts.projectionDate.getFullYear(), opts.projectionDate.getMonth(), 1);
+  const ref = new Date(opts.refDate.getFullYear(), opts.refDate.getMonth(), 1);
+
+  if (!opts.finCredit) {
+    // Sans fin de prêt : amortissement approximatif via la mensualité n’est pas connu ici → CRD figé
+    return round2(capitalAtRef);
+  }
+
+  const fin = opts.finCredit instanceof Date ? opts.finCredit : new Date(opts.finCredit);
+  if (Number.isNaN(fin.getTime())) return round2(capitalAtRef);
+  const finMonth = new Date(fin.getFullYear(), fin.getMonth(), 1);
+
+  const leftAtProj = monthsBetween(proj, finMonth);
+  if (leftAtProj <= 0) return 0;
+
+  const leftAtRef = monthsBetween(ref, finMonth);
+  if (leftAtRef <= 0) return 0;
+
+  return round2(Math.max(0, capitalAtRef * (leftAtProj / leftAtRef)));
+}
+
+/** True si on peut construire un tableau d’amortissement classique. */
+export function hasAmortizationInputs(credit: {
+  montantInitial?: number;
+  taux?: number;
+  duree?: number;
+  debut?: string | null;
+}): boolean {
+  return Boolean(
+    credit.montantInitial &&
+      credit.duree &&
+      credit.debut &&
+      String(credit.debut).trim() !== "",
+  );
+}
+
 export function enrichCredit(credit: {
   banque: string;
   montantInitial: number;
@@ -141,9 +198,15 @@ export function enrichCredit(credit: {
   assuranceMensuelle?: number;
   mensualite?: number;
   capitalRestant?: number;
+  finCredit?: string | null;
 }) {
-  if (!credit.montantInitial || !credit.duree || !credit.debut) {
-    return { ...credit, mensualite: credit.mensualite ?? 0, capitalRestant: credit.capitalRestant ?? 0 };
+  if (!hasAmortizationInputs(credit)) {
+    return {
+      ...credit,
+      mensualite: credit.mensualite ?? 0,
+      capitalRestant: credit.capitalRestant ?? 0,
+      finCredit: credit.finCredit ?? null,
+    };
   }
   const summary = computeLoanSummary({
     montantInitial: credit.montantInitial,
@@ -152,5 +215,10 @@ export function enrichCredit(credit: {
     dateDebut: credit.debut,
     assuranceMensuelle: credit.assuranceMensuelle,
   });
-  return { ...credit, mensualite: summary.mensualite, capitalRestant: summary.capitalRestant };
+  return {
+    ...credit,
+    mensualite: summary.mensualite,
+    capitalRestant: summary.capitalRestant,
+    finCredit: credit.finCredit ?? summary.finCredit.toISOString().slice(0, 10),
+  };
 }
