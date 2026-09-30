@@ -214,23 +214,19 @@ function DelConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: 
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 
-function knownShareholders(scis: SCI[]): string[] {
-  return [...new Set(scis.flatMap((s) => s.associes.map((a) => a.name)))].sort();
+function normPerson(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Ne renvoie un nom que s'il existe vraiment dans les parts SCI (évite 0 % partout). */
-function resolveShareName(
-  user: AuthUser | null | undefined,
-  scis: SCI[],
-  selected: string | null,
-): string | null {
+/** Quote-part = compte connecté (shareholder_name ou name), uniquement s'il existe dans les SCI. */
+function personalShareName(user: AuthUser | null | undefined, scis: SCI[]): string | null {
   if (!user || user.role === "BANQUE") return null;
-  const known = knownShareholders(scis);
-  if (selected === "__all__") return null;
-  if (selected && known.includes(selected)) return selected;
-  const fromProfile = user.shareholderName?.trim() || null;
-  if (fromProfile && known.includes(fromProfile)) return fromProfile;
-  if (user.name && known.includes(user.name)) return user.name;
+  const known = [...new Set(scis.flatMap((s) => s.associes.map((a) => a.name)))];
+  const candidates = [user.shareholderName, user.name].filter(Boolean) as string[];
+  for (const c of candidates) {
+    const match = known.find((k) => normPerson(k) === normPerson(c));
+    if (match) return match;
+  }
   return null;
 }
 
@@ -246,15 +242,7 @@ function DashboardView({
   onSelectProperty: (id: string) => void;
   user?: AuthUser | null;
 }) {
-  const shareholders = knownShareholders(scis);
-  const defaultPick =
-    user?.shareholderName && shareholders.includes(user.shareholderName)
-      ? user.shareholderName
-      : user?.role === "GERANT"
-        ? "__all__"
-        : shareholders[0] ?? "__all__";
-  const [sharePick, setSharePick] = useState(defaultPick);
-  const shareName = resolveShareName(user, scis, sharePick);
+  const shareName = personalShareName(user, scis);
 
   const totalBrut = scis.reduce((s, x) => s + x.valeurEstimee, 0);
   const totalDette = properties.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
@@ -301,22 +289,6 @@ function DashboardView({
       ]
     : [];
 
-  const shareSelect = shareholders.length > 0 && (
-    <select
-      className={`${selectCls} text-xs max-w-[220px]`}
-      value={sharePick}
-      onChange={(e) => setSharePick(e.target.value)}
-      aria-label="Quote-part à afficher"
-    >
-      {(user?.role === "GERANT" || !user?.shareholderName) && (
-        <option value="__all__">Tout le patrimoine</option>
-      )}
-      {shareholders.map((name) => (
-        <option key={name} value={name}>{name}</option>
-      ))}
-    </select>
-  );
-
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5 lg:space-y-6`}>
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
@@ -331,55 +303,46 @@ function DashboardView({
         ))}
       </motion.div>
 
-      <motion.div variants={itemV} initial="hidden" animate="show" className={`${G} p-4 sm:p-5`}>
-        <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
-          <div>
-            <p className={lbl}>Quote-part personnelle</p>
-            <p className="text-xs sm:text-sm vision-text-muted mt-0.5">
-              {shareName
-                ? `Indicateurs au prorata des parts de ${shareName} dans chaque SCI`
-                : "Vue globale du patrimoine — choisis un associé pour voir sa quote-part"}
-            </p>
+      {personal && (
+        <motion.div variants={itemV} initial="hidden" animate="show" className={`${G} p-4 sm:p-5`}>
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
+            <div>
+              <p className={lbl}>Quote-part personnelle</p>
+              <p className="text-xs sm:text-sm vision-text-muted mt-0.5">
+                Indicateurs au prorata des parts de {shareName} dans chaque SCI
+              </p>
+            </div>
           </div>
-          {shareSelect}
-        </div>
-        {personal ? (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
-              {personalKpis.map((k) => (
-                <div key={k.l} className="vision-surface rounded-xl p-3" style={{ border: `1px solid ${k.color}22` }}>
-                  <div className="flex items-center justify-between mb-2 gap-2">
-                    <MetricLabel label={k.l} className="mb-0 min-w-0" />
-                    <k.Icon size={14} style={{ color: k.color }} className="flex-shrink-0" />
-                  </div>
-                  <p className="text-sm sm:text-base font-bold font-mono truncate" style={{ color: k.color }}>{k.v}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
+            {personalKpis.map((k) => (
+              <div key={k.l} className="vision-surface rounded-xl p-3" style={{ border: `1px solid ${k.color}22` }}>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <MetricLabel label={k.l} className="mb-0 min-w-0" />
+                  <k.Icon size={14} style={{ color: k.color }} className="flex-shrink-0" />
                 </div>
-              ))}
-            </div>
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-              {scis.map((sci) => {
-                const ratio = sciShareRatio(sci, shareName!);
-                const pct = Math.round(ratio * 100);
-                const props = properties.filter((p) => p.sciId === sci.id);
-                const dette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
-                return (
-                  <div key={sci.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 vision-surface">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sci.color }} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold vision-text truncate">{sci.shortName}</p>
-                      <p className="text-xs vision-text-muted">{pct}% · part dette {fmt(dette * ratio)}</p>
-                    </div>
+                <p className="text-sm sm:text-base font-bold font-mono truncate" style={{ color: k.color }}>{k.v}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {scis.map((sci) => {
+              const ratio = sciShareRatio(sci, shareName!);
+              const pct = Math.round(ratio * 100);
+              const props = properties.filter((p) => p.sciId === sci.id);
+              const dette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
+              return (
+                <div key={sci.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 vision-surface">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sci.color }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold vision-text truncate">{sci.shortName}</p>
+                    <p className="text-xs vision-text-muted">{pct}% · part dette {fmt(dette * ratio)}</p>
                   </div>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <p className="text-sm vision-text-muted">
-            Sélectionne Johann Faraut ou Alexandre Niel dans le menu pour afficher les indicateurs au prorata.
-          </p>
-        )}
-      </motion.div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 md:gap-5 w-full">
         <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.12 }} className={`${G} p-4 sm:p-5 xl:col-span-2 w-full min-w-0`}>
