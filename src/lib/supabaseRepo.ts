@@ -116,6 +116,7 @@ export interface PropertyRow {
     assuranceMensuelle?: number;
     mensualite: number;
     capitalRestant: number;
+    finCredit?: string | null;
   };
 }
 
@@ -204,6 +205,7 @@ export async function fetchPortfolio(): Promise<{
             assuranceMensuelle: Number(loan.assurance_mensuelle),
             mensualite: Number(loan.mensualite),
             capitalRestant: Number(loan.capital_restant),
+            finCredit: loan.fin_credit ?? null,
           }
         : undefined,
     };
