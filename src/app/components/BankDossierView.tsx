@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
-  Building2, Send, Eye, Trash2, FileText, Euro, TrendingUp, Shield,
-  Check, ChevronDown, Banknote,
+  Building2, Send, Eye, Trash2, FileText, Check, ChevronDown, Banknote,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import type { AuthUser } from "@/lib/auth";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import { createDossier, deleteDossier, fetchDossier, fetchDossiers, sendDossier } from "@/lib/supabaseRepo";
 import { pageWrap, G, lbl, inp, btnP, btnG, btnD } from "./layout";
 
 const fmt = (n: number) =>
@@ -15,38 +17,112 @@ const BANKS = [
   "Crédit Mutuel", "Banque Populaire", "BRED", "Caisse d'Épargne",
 ];
 
-interface DossierPreview {
-  synthese: {
-    patrimoineBrut?: number;
-    patrimoineNet?: number;
-    detteTotale?: number;
-    cashMensuelNet?: number;
-    loyersAnnuels?: number;
-    tauxEndettement?: number;
-    rendementBrut?: number;
-    repartitionBanques?: Array<{ banque: string; capitalRestant: number; mensualites: number }>;
-    demande?: { montant: number; objet: string | null; ltvProjete: number | null };
-  };
-  entites: Array<{ shortName: string; type: string; valeurEstimee: number; dette: number }>;
-  biens: Array<{ address: string; ville: string; valeurActuelle: number; loyer: number }>;
-}
-
-interface DossierItem {
+interface SciOpt { id: string; shortName: string; valeurEstimee?: number }
+interface PropOpt {
   id: string;
-  reference: string;
-  title: string;
-  targetBank: string;
-  status: string;
-  montantDemande?: number;
-  sentAt?: string;
-  createdAt: string;
+  sciId: string;
+  address: string;
+  ville: string;
+  type: string;
+  valeurActuelle: number;
+  loyer: number;
+  taxeFonciere: number;
+  assurance: number;
+  credit?: { banque: string; capitalRestant: number; mensualite: number; assuranceMensuelle?: number; montantInitial: number; taux: number };
 }
 
 interface BankDossierViewProps {
-  entityOptions: Array<{ id: string; shortName: string }>;
+  user: AuthUser;
+  entityOptions: SciOpt[];
+  properties: PropOpt[];
+  scis: SciOpt[];
 }
 
-export function BankDossierView({ entityOptions }: BankDossierViewProps) {
+function buildPayload(
+  properties: PropOpt[],
+  scis: SciOpt[],
+  entitySlugs: string[],
+  opts: {
+    includePatrimoine: boolean;
+    includeEndettement: boolean;
+    includeCashFlow: boolean;
+    montantDemande?: number;
+    objet?: string;
+  },
+) {
+  const ents = scis.filter((s) => entitySlugs.includes(s.id));
+  const props = properties.filter((p) => entitySlugs.includes(p.sciId));
+  const totalValeur = ents.reduce((s, e) => s + (e.valeurEstimee ?? 0), 0);
+  const totalDette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
+  const totalLoyers = props.reduce((s, p) => s + p.loyer * 12, 0);
+  const totalMens = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0) + (p.credit?.assuranceMensuelle ?? 0), 0);
+  const cash = props.reduce((s, p) => s + Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - p.assurance / 12), 0);
+
+  const byBank: Record<string, { count: number; crd: number; mensualites: number }> = {};
+  for (const p of props) {
+    if (!p.credit) continue;
+    const b = p.credit.banque;
+    if (!byBank[b]) byBank[b] = { count: 0, crd: 0, mensualites: 0 };
+    byBank[b].count += 1;
+    byBank[b].crd += p.credit.capitalRestant;
+    byBank[b].mensualites += p.credit.mensualite + (p.credit.assuranceMensuelle ?? 0);
+  }
+
+  return {
+    synthese: {
+      dateGeneration: new Date().toISOString(),
+      nombreEntites: ents.length,
+      nombreBiens: props.length,
+      ...(opts.includePatrimoine && {
+        patrimoineBrut: totalValeur,
+        patrimoineNet: totalValeur - totalDette,
+        tauxEndettement: totalValeur > 0 ? Math.round((totalDette / totalValeur) * 1000) / 10 : 0,
+        rendementBrut: totalValeur > 0 ? Math.round((totalLoyers / totalValeur) * 10000) / 100 : 0,
+      }),
+      ...(opts.includeEndettement && {
+        detteTotale: totalDette,
+        mensualitesTotales: Math.round(totalMens * 100) / 100,
+        repartitionBanques: Object.entries(byBank).map(([banque, v]) => ({
+          banque,
+          nombreCredits: v.count,
+          capitalRestant: v.crd,
+          mensualites: Math.round(v.mensualites * 100) / 100,
+        })),
+      }),
+      ...(opts.includeCashFlow && {
+        loyersAnnuels: totalLoyers,
+        cashMensuelNet: cash,
+      }),
+      ...(opts.montantDemande != null && {
+        demande: {
+          montant: opts.montantDemande,
+          objet: opts.objet ?? null,
+          ltvProjete: totalValeur > 0 ? Math.round(((totalDette + opts.montantDemande) / totalValeur) * 1000) / 10 : null,
+        },
+      }),
+    },
+    entites: ents.map((e) => ({
+      slug: e.id,
+      shortName: e.shortName,
+      valeurEstimee: e.valeurEstimee ?? 0,
+      dette: props.filter((p) => p.sciId === e.id).reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0),
+    })),
+    biens: props.map((p) => ({
+      address: p.address,
+      ville: p.ville,
+      type: p.type,
+      valeurActuelle: p.valeurActuelle,
+      loyer: p.loyer,
+      cashMensuel: Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - p.assurance / 12),
+      credit: p.credit
+        ? { banque: p.credit.banque, capitalRestant: p.credit.capitalRestant, mensualite: p.credit.mensualite, taux: p.credit.taux }
+        : null,
+    })),
+  };
+}
+
+export function BankDossierView({ user, entityOptions, properties, scis }: BankDossierViewProps) {
+  const useSb = isSupabaseConfigured();
   const [title, setTitle] = useState("Demande de financement immobilier");
   const [targetBank, setTargetBank] = useState(BANKS[0]);
   const [montant, setMontant] = useState(250000);
@@ -57,65 +133,68 @@ export function BankDossierView({ entityOptions }: BankDossierViewProps) {
   const [includeEndettement, setIncludeEndettement] = useState(true);
   const [includeCashFlow, setIncludeCashFlow] = useState(true);
   const [anonymizeTenants, setAnonymizeTenants] = useState(true);
-  const [preview, setPreview] = useState<DossierPreview | null>(null);
-  const [dossiers, setDossiers] = useState<DossierItem[]>([]);
+  const [preview, setPreview] = useState<ReturnType<typeof buildPayload> | null>(null);
+  const [dossiers, setDossiers] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDossier, setSelectedDossier] = useState<Record<string, unknown> | null>(null);
 
-  const loadDossiers = () => api.getDossiers().then((d) => setDossiers(d as DossierItem[])).catch(() => {});
+  useEffect(() => {
+    setSelectedEntities(entityOptions.map((e) => e.id));
+  }, [entityOptions]);
 
-  useEffect(() => { loadDossiers(); }, []);
-
-  const buildPayload = useMemo(() => ({
-    entitySlugs: selectedEntities,
-    includePatrimoine,
-    includeEndettement,
-    includeCashFlow,
-    anonymizeTenants,
-    montantDemande: montant,
-    objet,
-  }), [selectedEntities, includePatrimoine, includeEndettement, includeCashFlow, anonymizeTenants, montant, objet]);
-
-  const handlePreview = async () => {
-    setLoading(true);
+  const loadDossiers = async () => {
     try {
-      const data = await api.previewDossier(buildPayload);
-      setPreview(data as DossierPreview);
+      if (useSb) setDossiers(await fetchDossiers());
+      else setDossiers(await api.getDossiers());
     } catch {
-      setPreview(null);
-    } finally {
-      setLoading(false);
+      setDossiers([]);
     }
+  };
+
+  useEffect(() => { loadDossiers(); }, [useSb]);
+
+  const opts = useMemo(() => ({
+    includePatrimoine, includeEndettement, includeCashFlow, montantDemande: montant, objet,
+  }), [includePatrimoine, includeEndettement, includeCashFlow, montant, objet]);
+
+  const handlePreview = () => {
+    setPreview(buildPayload(properties, scis, selectedEntities, opts));
   };
 
   const handleCreate = async (sendNow: boolean) => {
     setLoading(true);
     try {
-      await api.createDossier({
-        title,
-        targetBank,
-        message,
-        ...buildPayload,
-        sendNow,
-      });
+      const payload = buildPayload(properties, scis, selectedEntities, opts);
+      if (useSb) {
+        await createDossier({
+          title, targetBank, message, montantDemande: montant, objet,
+          entitySlugs: selectedEntities, includePatrimoine, includeEndettement, includeCashFlow,
+          anonymizeTenants, payload, sendNow, createdBy: user.id,
+        });
+      } else {
+        await api.createDossier({
+          title, targetBank, message, montantDemande: montant, objet,
+          entitySlugs: selectedEntities, includePatrimoine, includeEndettement, includeCashFlow,
+          anonymizeTenants, sendNow,
+        });
+      }
       setPreview(null);
-      loadDossiers();
+      await loadDossiers();
     } finally {
       setLoading(false);
     }
   };
 
   const toggleEntity = (id: string) => {
-    setSelectedEntities((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedEntities((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   };
 
   const viewDossier = async (id: string) => {
-    const d = await api.getDossier(id);
-    setSelectedDossier(d);
+    const d = useSb ? await fetchDossier(id) : await api.getDossier(id);
+    setSelectedDossier(d as Record<string, unknown>);
   };
 
+  const statusOf = (d: Record<string, unknown>) => String(d.status ?? "");
   const statusColor = (s: string) =>
     ({ DRAFT: "var(--v-text-muted)", SENT: "var(--v-info-text)", VIEWED: "var(--v-positive-text)", EXPIRED: "var(--v-negative-text)" }[s] ?? "var(--v-text-muted)");
 
@@ -129,7 +208,7 @@ export function BankDossierView({ entityOptions }: BankDossierViewProps) {
           <div>
             <h2 className="text-base font-bold vision-text">Dossier de négociation bancaire</h2>
             <p className="text-sm vision-text-muted mt-0.5">
-              Compilez automatiquement votre patrimoine, endettement et cash-flow pour présenter votre situation à une banque.
+              Compilez le patrimoine réel (Excel / Supabase) pour présenter votre situation à une banque.
             </p>
           </div>
         </div>
@@ -160,8 +239,8 @@ export function BankDossierView({ entityOptions }: BankDossierViewProps) {
               </div>
             </div>
             <div>
-              <label className={lbl}>Message accompagnement</label>
-              <textarea className={`${inp} min-h-[80px]`} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Contexte de la demande, projet envisagé…" />
+              <label className={lbl}>Message</label>
+              <textarea className={`${inp} min-h-[80px]`} value={message} onChange={(e) => setMessage(e.target.value)} />
             </div>
           </div>
 
@@ -169,41 +248,29 @@ export function BankDossierView({ entityOptions }: BankDossierViewProps) {
             <p className={lbl}>Entités à inclure</p>
             <div className="flex flex-wrap gap-2">
               {entityOptions.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => toggleEntity(e.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${selectedEntities.includes(e.id) ? "vision-nav-active" : "vision-surface vision-text-muted"}`}
-                >
+                <button key={e.id} type="button" onClick={() => toggleEntity(e.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${selectedEntities.includes(e.id) ? "vision-nav-active" : "vision-surface vision-text-muted"}`}>
                   {selectedEntities.includes(e.id) && <Check size={10} className="inline mr-1" />}
                   {e.shortName}
                 </button>
               ))}
             </div>
-
-            <p className={lbl}>Contenu du dossier</p>
+            <p className={lbl}>Contenu</p>
             {[
-              { key: "patrimoine", label: "Synthèse patrimoniale", val: includePatrimoine, set: setIncludePatrimoine },
-              { key: "dette", label: "Endettement & répartition banques", val: includeEndettement, set: setIncludeEndettement },
-              { key: "cash", label: "Cash-flow & capacité de remboursement", val: includeCashFlow, set: setIncludeCashFlow },
-              { key: "anon", label: "Anonymiser les locataires", val: anonymizeTenants, set: setAnonymizeTenants },
+              { label: "Synthèse patrimoniale", val: includePatrimoine, set: setIncludePatrimoine },
+              { label: "Endettement & banques", val: includeEndettement, set: setIncludeEndettement },
+              { label: "Cash-flow", val: includeCashFlow, set: setIncludeCashFlow },
+              { label: "Anonymiser locataires", val: anonymizeTenants, set: setAnonymizeTenants },
             ].map((opt) => (
-              <label key={opt.key} className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={opt.val} onChange={(e) => opt.set(e.target.checked)} className="rounded" />
+              <label key={opt.label} className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={opt.val} onChange={(e) => opt.set(e.target.checked)} />
                 <span className="text-sm vision-text">{opt.label}</span>
               </label>
             ))}
-
             <div className="flex flex-wrap gap-2 pt-2">
-              <button type="button" onClick={handlePreview} disabled={loading} className={btnG}>
-                <Eye size={14} /> Prévisualiser
-              </button>
-              <button type="button" onClick={() => handleCreate(false)} disabled={loading} className={btnG}>
-                <FileText size={14} /> Enregistrer brouillon
-              </button>
-              <button type="button" onClick={() => handleCreate(true)} disabled={loading} className={btnP}>
-                <Send size={14} /> Envoyer à la banque
-              </button>
+              <button type="button" onClick={handlePreview} className={btnG}><Eye size={14} /> Prévisualiser</button>
+              <button type="button" onClick={() => handleCreate(false)} disabled={loading} className={btnG}><FileText size={14} /> Brouillon</button>
+              <button type="button" onClick={() => handleCreate(true)} disabled={loading} className={btnP}><Send size={14} /> Envoyer</button>
             </div>
           </div>
         </div>
@@ -211,97 +278,62 @@ export function BankDossierView({ entityOptions }: BankDossierViewProps) {
 
       {preview && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`${G} p-5`}>
-          <p className={`${lbl} mb-4`}>Aperçu du dossier</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+          <p className={`${lbl} mb-4`}>Aperçu</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {preview.synthese.patrimoineBrut != null && (
-              <div className="vision-surface rounded-xl p-3">
-                <p className="text-xs vision-text-muted">Patrimoine brut</p>
-                <p className="text-sm font-bold font-mono vision-info-text">{fmt(preview.synthese.patrimoineBrut)}</p>
-              </div>
+              <div className="vision-surface rounded-xl p-3"><p className="text-xs vision-text-muted">Patrimoine brut</p><p className="text-sm font-bold font-mono vision-info-text">{fmt(preview.synthese.patrimoineBrut)}</p></div>
             )}
             {preview.synthese.patrimoineNet != null && (
-              <div className="vision-surface rounded-xl p-3">
-                <p className="text-xs vision-text-muted">Patrimoine net</p>
-                <p className="text-sm font-bold font-mono vision-positive-text">{fmt(preview.synthese.patrimoineNet)}</p>
-              </div>
+              <div className="vision-surface rounded-xl p-3"><p className="text-xs vision-text-muted">Net</p><p className="text-sm font-bold font-mono vision-positive-text">{fmt(preview.synthese.patrimoineNet)}</p></div>
             )}
             {preview.synthese.detteTotale != null && (
-              <div className="vision-surface rounded-xl p-3">
-                <p className="text-xs vision-text-muted">Dette totale</p>
-                <p className="text-sm font-bold font-mono vision-negative-text">{fmt(preview.synthese.detteTotale)}</p>
-              </div>
+              <div className="vision-surface rounded-xl p-3"><p className="text-xs vision-text-muted">Dette</p><p className="text-sm font-bold font-mono vision-negative-text">{fmt(preview.synthese.detteTotale)}</p></div>
             )}
             {preview.synthese.cashMensuelNet != null && (
-              <div className="vision-surface rounded-xl p-3">
-                <p className="text-xs vision-text-muted">Cash-flow mensuel</p>
-                <p className="text-sm font-bold font-mono" style={{ color: preview.synthese.cashMensuelNet >= 0 ? "#34d399" : "#f87171" }}>
-                  {preview.synthese.cashMensuelNet >= 0 ? "+" : ""}{fmt(preview.synthese.cashMensuelNet)}
-                </p>
-              </div>
+              <div className="vision-surface rounded-xl p-3"><p className="text-xs vision-text-muted">Cash/mois</p><p className="text-sm font-bold font-mono">{fmt(preview.synthese.cashMensuelNet)}</p></div>
             )}
           </div>
-
-          {preview.synthese.repartitionBanques && (
-            <div className="mb-4">
-              <p className="text-xs vision-text-muted mb-2 flex items-center gap-1"><Building2 size={12} /> Répartition par banque</p>
-              <div className="space-y-1.5">
-                {preview.synthese.repartitionBanques.map((b) => (
-                  <div key={b.banque} className="flex justify-between text-sm vision-surface rounded-lg px-3 py-2">
-                    <span className="vision-text">{b.banque}</span>
-                    <span className="font-mono vision-negative-text">{fmt(b.capitalRestant)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {preview.synthese.demande && (
-            <div className="vision-surface rounded-xl p-4 border border-[var(--v-accent)]/20">
-              <p className="text-xs vision-text-muted mb-1">Demande projetée</p>
-              <p className="text-lg font-bold vision-text">{fmt(preview.synthese.demande.montant)}</p>
-              {preview.synthese.demande.ltvProjete != null && (
-                <p className="text-xs vision-text-muted mt-1">LTV projeté : {preview.synthese.demande.ltvProjete} %</p>
-              )}
-            </div>
-          )}
         </motion.div>
       )}
 
       <div className={`${G} p-5`}>
-        <p className={`${lbl} mb-4`}>Dossiers existants</p>
+        <p className={`${lbl} mb-4`}>Dossiers</p>
         {dossiers.length === 0 ? (
-          <p className="text-sm vision-text-muted">Aucun dossier pour le moment.</p>
+          <p className="text-sm vision-text-muted">Aucun dossier.</p>
         ) : (
           <div className="space-y-2">
-            {dossiers.map((d) => (
-              <div key={d.id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl vision-surface border border-[var(--v-border-subtle)]">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold vision-text">{d.title}</p>
-                  <p className="text-xs vision-text-muted">{d.reference} · {d.targetBank} · {new Date(d.createdAt).toLocaleDateString("fr-FR")}</p>
+            {dossiers.map((d) => {
+              const id = String(d.id);
+              const status = statusOf(d);
+              return (
+                <div key={id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl vision-surface border border-[var(--v-border-subtle)]">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold vision-text">{String(d.title)}</p>
+                    <p className="text-xs vision-text-muted">{String(d.reference)} · {String(d.target_bank ?? d.targetBank)}</p>
+                  </div>
+                  <span className="text-xs font-bold" style={{ color: statusColor(status) }}>{status}</span>
+                  <button type="button" onClick={() => viewDossier(id)} className={btnG}><Eye size={12} /></button>
+                  {status === "DRAFT" && (
+                    <button type="button" onClick={() => (useSb ? sendDossier(id) : api.sendDossier(id)).then(loadDossiers)} className={btnP}><Send size={12} /></button>
+                  )}
+                  <button type="button" onClick={() => (useSb ? deleteDossier(id) : api.deleteDossier(id)).then(loadDossiers)} className={btnD}><Trash2 size={12} /></button>
                 </div>
-                <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ color: statusColor(d.status) }}>{d.status}</span>
-                {d.montantDemande && <span className="text-xs font-mono vision-text">{fmt(d.montantDemande)}</span>}
-                <button type="button" onClick={() => viewDossier(d.id)} className={btnG}><Eye size={12} /></button>
-                {d.status === "DRAFT" && (
-                  <button type="button" onClick={() => api.sendDossier(d.id).then(loadDossiers)} className={btnP}><Send size={12} /></button>
-                )}
-                <button type="button" onClick={() => api.deleteDossier(d.id).then(loadDossiers)} className={btnD}><Trash2 size={12} /></button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
       {selectedDossier && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`${G} p-5`}>
-          <div className="flex justify-between items-start mb-4">
+        <div className={`${G} p-5`}>
+          <div className="flex justify-between mb-4">
             <p className="font-bold vision-text">{String(selectedDossier.title)}</p>
             <button type="button" onClick={() => setSelectedDossier(null)} className={btnG}>Fermer</button>
           </div>
           <pre className="text-xs vision-text-muted overflow-auto max-h-96 vision-surface rounded-xl p-4">
             {JSON.stringify(selectedDossier.payload, null, 2)}
           </pre>
-        </motion.div>
+        </div>
       )}
     </div>
   );

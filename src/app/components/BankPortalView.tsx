@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import { fetchDossier, fetchDossiers } from "@/lib/supabaseRepo";
 import { pageWrap, G, lbl, btnG } from "./layout";
 
 const fmt = (n: number) =>
@@ -57,14 +59,36 @@ interface BankPortalViewProps {
 export function BankPortalView({ user, loans }: BankPortalViewProps) {
   const [dossiers, setDossiers] = useState<DossierItem[]>([]);
   const [selected, setSelected] = useState<{ meta: DossierItem; payload: DossierPayload } | null>(null);
+  const useSb = isSupabaseConfigured();
+
+  const mapDossier = (d: Record<string, unknown>): DossierItem => ({
+    id: String(d.id),
+    reference: String(d.reference),
+    title: String(d.title),
+    targetBank: String(d.target_bank ?? d.targetBank ?? ""),
+    status: String(d.status),
+    montantDemande: d.montant_demande != null ? Number(d.montant_demande) : d.montantDemande != null ? Number(d.montantDemande) : undefined,
+    objet: (d.objet as string) ?? undefined,
+    sentAt: (d.sent_at as string) ?? (d.sentAt as string) ?? undefined,
+    viewedAt: (d.viewed_at as string) ?? (d.viewedAt as string) ?? undefined,
+    createdAt: String(d.created_at ?? d.createdAt ?? ""),
+    createdByName: (d.createdByName as string) ?? undefined,
+  });
 
   useEffect(() => {
-    api.getDossiers().then((d) => setDossiers(d as DossierItem[])).catch(() => {});
-  }, []);
+    (async () => {
+      try {
+        const raw = useSb ? await fetchDossiers() : await api.getDossiers();
+        setDossiers((raw as Record<string, unknown>[]).map(mapDossier));
+      } catch {
+        setDossiers([]);
+      }
+    })();
+  }, [useSb]);
 
   const openDossier = async (d: DossierItem) => {
-    const full = await api.getDossier(d.id);
-    setSelected({ meta: d, payload: full.payload as DossierPayload });
+    const full = (useSb ? await fetchDossier(d.id) : await api.getDossier(d.id)) as Record<string, unknown>;
+    setSelected({ meta: mapDossier(full), payload: full.payload as DossierPayload });
   };
 
   const myLoansTotal = loans.reduce((s, l) => s + l.capitalRestant, 0);
