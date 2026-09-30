@@ -140,26 +140,50 @@ export function monthsBetween(from: Date, to: Date): number {
 }
 
 /**
- * CRD projeté pour un crédit importé Excel (souvent sans taux/durée/début).
- * On connaît le CRD à une date de référence (snapshot Excel) et la fin de prêt :
- * projection linéaire sur le capital restant jusqu’à la fin.
+ * Modèle Excel Beneduc / Troika :
+ * CRD(mois) = max(0, CRD_réf − mensualité × nombre de mois depuis la date de réf).
+ * Vérifié à l’euro près sur « Amort Beneduc » / « Amort Troika ».
+ */
+export function projectFlatCrd(opts: {
+  capitalAtRef: number;
+  refDate: Date;
+  projectionDate: Date;
+  mensualite: number;
+}): number {
+  const capitalAtRef = Math.max(0, opts.capitalAtRef || 0);
+  const mens = Math.max(0, opts.mensualite || 0);
+  if (capitalAtRef <= 0) return 0;
+  const months = monthsBetween(opts.refDate, opts.projectionDate);
+  if (months <= 0) return round2(capitalAtRef);
+  return round2(Math.max(0, capitalAtRef - mens * months));
+}
+
+/**
+ * @deprecated préférer projectFlatCrd (modèle Excel réel).
+ * Ancienne extrapolation linéaire jusqu’à la fin de prêt.
  */
 export function projectImportedCrd(opts: {
   capitalAtRef: number;
   refDate: Date;
   projectionDate: Date;
   finCredit?: string | Date | null;
+  mensualite?: number;
 }): number {
+  if (opts.mensualite && opts.mensualite > 0) {
+    return projectFlatCrd({
+      capitalAtRef: opts.capitalAtRef,
+      refDate: opts.refDate,
+      projectionDate: opts.projectionDate,
+      mensualite: opts.mensualite,
+    });
+  }
   const capitalAtRef = Math.max(0, opts.capitalAtRef || 0);
   if (capitalAtRef <= 0) return 0;
 
   const proj = new Date(opts.projectionDate.getFullYear(), opts.projectionDate.getMonth(), 1);
   const ref = new Date(opts.refDate.getFullYear(), opts.refDate.getMonth(), 1);
 
-  if (!opts.finCredit) {
-    // Sans fin de prêt : amortissement approximatif via la mensualité n’est pas connu ici → CRD figé
-    return round2(capitalAtRef);
-  }
+  if (!opts.finCredit) return round2(capitalAtRef);
 
   const fin = opts.finCredit instanceof Date ? opts.finCredit : new Date(opts.finCredit);
   if (Number.isNaN(fin.getTime())) return round2(capitalAtRef);
@@ -174,8 +198,8 @@ export function projectImportedCrd(opts: {
   return round2(Math.max(0, capitalAtRef * (leftAtProj / leftAtRef)));
 }
 
-/** True si on peut construire un tableau d’amortissement classique. */
-export function hasAmortizationInputs(credit: {
+/** Tableau d’amortissement bancaire classique (intérêts) si taux + durée + début. */
+export function hasRateBasedAmortization(credit: {
   montantInitial?: number;
   taux?: number;
   duree?: number;
@@ -183,9 +207,22 @@ export function hasAmortizationInputs(credit: {
 }): boolean {
   return Boolean(
     credit.montantInitial &&
+      (credit.taux ?? 0) > 0 &&
       credit.duree &&
       credit.debut &&
       String(credit.debut).trim() !== "",
+  );
+}
+
+/** @deprecated utiliser hasRateBasedAmortization */
+export function hasAmortizationInputs(credit: {
+  montantInitial?: number;
+  taux?: number;
+  duree?: number;
+  debut?: string | null;
+}): boolean {
+  return hasRateBasedAmortization(credit) || Boolean(
+    credit.montantInitial && credit.duree && credit.debut && String(credit.debut).trim() !== "" && (credit.taux ?? 0) === 0,
   );
 }
 
@@ -200,25 +237,43 @@ export function enrichCredit(credit: {
   capitalRestant?: number;
   finCredit?: string | null;
 }) {
-  if (!hasAmortizationInputs(credit)) {
+  // Nouveau prêt / prêt à taux : générer mensualité + CRD depuis les paramètres
+  if (hasRateBasedAmortization(credit)) {
+    const summary = computeLoanSummary({
+      montantInitial: credit.montantInitial,
+      tauxAnnuel: credit.taux,
+      dureeMois: credit.duree,
+      dateDebut: credit.debut,
+      assuranceMensuelle: credit.assuranceMensuelle,
+    });
     return {
       ...credit,
-      mensualite: credit.mensualite ?? 0,
-      capitalRestant: credit.capitalRestant ?? 0,
+      mensualite: summary.mensualite,
+      capitalRestant: summary.capitalRestant,
+      finCredit: credit.finCredit ?? summary.finCredit.toISOString().slice(0, 10),
+    };
+  }
+
+  // Import Excel (taux 0) : CRD projeté = flat depuis date de début / réf
+  if (credit.debut && credit.mensualite && credit.montantInitial) {
+    const capitalRestant = projectFlatCrd({
+      capitalAtRef: credit.montantInitial,
+      refDate: new Date(credit.debut),
+      projectionDate: new Date(),
+      mensualite: credit.mensualite,
+    });
+    return {
+      ...credit,
+      mensualite: credit.mensualite,
+      capitalRestant,
       finCredit: credit.finCredit ?? null,
     };
   }
-  const summary = computeLoanSummary({
-    montantInitial: credit.montantInitial,
-    tauxAnnuel: credit.taux,
-    dureeMois: credit.duree,
-    dateDebut: credit.debut,
-    assuranceMensuelle: credit.assuranceMensuelle,
-  });
+
   return {
     ...credit,
-    mensualite: summary.mensualite,
-    capitalRestant: summary.capitalRestant,
-    finCredit: credit.finCredit ?? summary.finCredit.toISOString().slice(0, 10),
+    mensualite: credit.mensualite ?? 0,
+    capitalRestant: credit.capitalRestant ?? 0,
+    finCredit: credit.finCredit ?? null,
   };
 }

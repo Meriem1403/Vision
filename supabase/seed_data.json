@@ -18,11 +18,7 @@
           "Alexandre Niel",
           50
         ]
-      ],
-      "proj": {
-        "month": 3,
-        "year": 2026
-      }
+      ]
     },
     {
       "slug": "troika",
@@ -42,11 +38,7 @@
           "Alexandre Niel",
           67
         ]
-      ],
-      "proj": {
-        "month": 10,
-        "year": 2025
-      }
+      ]
     },
     {
       "slug": "lavista",
@@ -66,11 +58,7 @@
           "Alexandre Niel",
           67
         ]
-      ],
-      "proj": {
-        "month": 10,
-        "year": 2025
-      }
+      ]
     },
     {
       "slug": "rp",
@@ -90,11 +78,7 @@
           "Alexandre Niel",
           34
         ]
-      ],
-      "proj": {
-        "month": 10,
-        "year": 2025
-      }
+      ]
     }
   ],
   "properties": [
@@ -117,11 +101,12 @@
         "banque": "À préciser",
         "montantInitial": 42620.35,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 102,
+        "debut": "2022-11-01",
         "mensualite": 440.18,
         "capitalRestant": 25013.15,
-        "finCredit": "2031-05-01"
+        "finCredit": "2031-05-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -143,11 +128,12 @@
         "banque": "À préciser",
         "montantInitial": 33327.18,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 103,
+        "debut": "2022-11-01",
         "mensualite": 175.0,
         "capitalRestant": 33327.18,
-        "finCredit": "2031-06-01"
+        "finCredit": "2031-06-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -170,10 +156,11 @@
         "montantInitial": 19327.18,
         "taux": 0,
         "duree": 0,
-        "debut": null,
+        "debut": "2022-11-01",
         "mensualite": 175.0,
         "capitalRestant": 19327.18,
-        "finCredit": null
+        "finCredit": null,
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -195,11 +182,12 @@
         "banque": "À préciser",
         "montantInitial": 59906.01,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 147,
+        "debut": "2022-11-01",
         "mensualite": 432.7,
         "capitalRestant": 42598.01,
-        "finCredit": "2035-02-01"
+        "finCredit": "2035-02-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -221,11 +209,12 @@
         "banque": "À préciser",
         "montantInitial": 98329.49,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 183,
+        "debut": "2022-11-01",
         "mensualite": 629.29,
         "capitalRestant": 73157.89,
-        "finCredit": "2038-02-01"
+        "finCredit": "2038-02-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -247,11 +236,12 @@
         "banque": "À préciser",
         "montantInitial": 68990.0,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 183,
+        "debut": "2022-11-01",
         "mensualite": 590.28,
         "capitalRestant": 68990.0,
-        "finCredit": "2038-02-01"
+        "finCredit": "2038-02-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -273,11 +263,12 @@
         "banque": "À préciser",
         "montantInitial": 332569.0,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 106,
+        "debut": "2022-11-01",
         "mensualite": 3310.05,
         "capitalRestant": 216717.25,
-        "finCredit": "2031-09-01"
+        "finCredit": "2031-09-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -299,11 +290,12 @@
         "banque": "À préciser",
         "montantInitial": 103262.68,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 162,
+        "debut": "2022-11-01",
         "mensualite": 854.55,
         "capitalRestant": 73353.43,
-        "finCredit": "2036-05-01"
+        "finCredit": "2036-05-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -325,11 +317,12 @@
         "banque": "À préciser",
         "montantInitial": 76008.0,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 154,
+        "debut": "2022-11-01",
         "mensualite": 528.0,
         "capitalRestant": 57528.0,
-        "finCredit": "2035-09-01"
+        "finCredit": "2035-09-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -351,11 +344,12 @@
         "banque": "À préciser",
         "montantInitial": 41288.94,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 155,
+        "debut": "2022-11-01",
         "mensualite": 287.44,
         "capitalRestant": 31228.54,
-        "finCredit": "2035-10-01"
+        "finCredit": "2035-10-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -377,11 +371,12 @@
         "banque": "À préciser",
         "montantInitial": 95000.0,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 143,
+        "debut": "2023-05-01",
         "mensualite": 877.0,
         "capitalRestant": 79463.68,
-        "finCredit": "2035-04-01"
+        "finCredit": "2035-04-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -403,11 +398,12 @@
         "banque": "À préciser",
         "montantInitial": 90000.0,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 150,
+        "debut": "2023-05-01",
         "mensualite": 916.99,
         "capitalRestant": 86260.81,
-        "finCredit": "2035-11-01"
+        "finCredit": "2035-11-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     },
     {
@@ -429,11 +425,12 @@
         "banque": "À préciser",
         "montantInitial": 266771.42,
         "taux": 0,
-        "duree": 0,
-        "debut": null,
+        "duree": 299,
+        "debut": "2024-11-01",
         "mensualite": 835.75,
         "capitalRestant": 266725.42,
-        "finCredit": "2049-10-01"
+        "finCredit": "2049-10-01",
+        "amortizationModel": "EXCEL_FLAT"
       }
     }
   ]

@@ -1,18 +1,26 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { getCrdAtDate, hasAmortizationInputs, monthsBetween, projectImportedCrd } from "@/lib/loanCalculator";
+import { getCrdAtDate, hasRateBasedAmortization, monthsBetween, projectFlatCrd } from "@/lib/loanCalculator";
 import { pageWrap, pageEndSpacer, G, lbl } from "./layout";
 import { GSelect, monthOptions, buildYearOptions } from "./GSelect";
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 const fmtD = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
 
-/** Dates auxquelles le CRD Excel (colonne F) a été figé dans le seed. */
+/** Dates de projection par défaut (sélecteurs Excel Vision patrimoine). */
 const DEFAULT_PROJECTION: Record<string, { month: number; year: number }> = {
   beneduc: { month: 3, year: 2026 },
   troika: { month: 10, year: 2025 },
   lavista: { month: 10, year: 2025 },
   rp: { month: 10, year: 2025 },
+};
+
+/** Date de début des tableaux d’amort Excel (1ʳᵉ échéance / CRD réf colonne E). */
+const AMORT_REF: Record<string, { month: number; year: number }> = {
+  beneduc: { month: 11, year: 2022 },
+  troika: { month: 11, year: 2022 },
+  lavista: { month: 5, year: 2023 },
+  rp: { month: 11, year: 2024 },
 };
 
 function shareRatioFromAssocies(sci: SCI, shareholderName?: string | null): number {
@@ -63,8 +71,9 @@ function finCreditLabel(c: Credit) {
   return "—";
 }
 
-function projectedCrd(credit: Credit, projection: Date, refDate: Date): number {
-  if (hasAmortizationInputs(credit)) {
+function projectedCrd(credit: Credit, projection: Date, sciId: string): number {
+  // Nouveau bien / prêt classique : tableau d’amortissement à taux
+  if (hasRateBasedAmortization(credit)) {
     return getCrdAtDate(
       {
         montantInitial: credit.montantInitial,
@@ -76,11 +85,21 @@ function projectedCrd(credit: Credit, projection: Date, refDate: Date): number {
       projection,
     );
   }
-  return projectImportedCrd({
-    capitalAtRef: credit.capitalRestant,
+
+  // Excel Beneduc/Troika : CRD = CRD_réf − mensualité × mois écoulés
+  const amortRef = AMORT_REF[sciId] ?? DEFAULT_PROJECTION[sciId] ?? {
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+  };
+  const refDate = credit.debut
+    ? new Date(credit.debut)
+    : new Date(amortRef.year, amortRef.month - 1, 1);
+
+  return projectFlatCrd({
+    capitalAtRef: credit.montantInitial || credit.capitalRestant,
     refDate,
     projectionDate: projection,
-    finCredit: credit.finCredit,
+    mensualite: credit.mensualite,
   });
 }
 
@@ -154,7 +173,8 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
   const [month, setMonth] = useState(defaults.month);
   const [year, setYear] = useState(defaults.year);
   const projection = new Date(year, month - 1, 1);
-  const refDate = new Date(defaults.year, defaults.month - 1, 1);
+  const amortRef = AMORT_REF[sci.id] ?? defaults;
+  const refDate = new Date(amortRef.year, amortRef.month - 1, 1);
 
   const startYears = properties
     .map((p) => (p.credit ? creditStartYear(p.credit, refDate) : null))
@@ -163,16 +183,16 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
     .map((p) => (p.credit ? creditEndYear(p.credit) : null))
     .filter((y): y is number => y != null);
 
-  const minCreditYear = startYears.length ? Math.min(...startYears) : defaults.year;
+  const minCreditYear = startYears.length ? Math.min(...startYears) : Math.min(refDate.getFullYear(), defaults.year);
   const maxCreditYear = endYears.length ? Math.max(...endYears) : defaults.year;
   const yearOpts = buildYearOptions(
-    Math.min(minCreditYear, defaults.year, year),
+    Math.min(minCreditYear, refDate.getFullYear(), defaults.year, year),
     Math.max(maxCreditYear, defaults.year, year),
   );
 
   const lines = properties.map((p) => {
     const crdRef = p.credit?.montantInitial ?? 0;
-    const crdProj = p.credit ? projectedCrd(p.credit, projection, refDate) : 0;
+    const crdProj = p.credit ? projectedCrd(p.credit, projection, sci.id) : 0;
     return { p, crdRef, crdProj, mensualite: p.credit?.mensualite ?? 0, cash: excelCash(p) };
   });
 

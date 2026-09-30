@@ -4,7 +4,7 @@ export const METRIC_FORMULAS: Record<string, string> = {
   "Dette restante": "Somme des capitaux restants dus (CRD) sur l’ensemble des crédits immobiliers.",
   "Patrimoine net": "Patrimoine brut − Dette restante.",
   "Loyers annuels": "Σ (loyer mensuel × 12) pour tous les biens locatifs.",
-  "Cash-flow / mois": "Σ [Loyer − Mensualité crédit − Taxe foncière/12 − Assurance/12] pour chaque bien.",
+  "Cash-flow / mois": "Σ [Loyer − Mensualité crédit − Taxe foncière/12] (formule Excel Vision patrimoine).",
   "Rendement brut": "(Loyers annuels ÷ Patrimoine brut) × 100.",
   "Valeur actuelle": "Estimation de marché saisie pour le bien.",
   "Plus-value": "Valeur actuelle − (Prix d’achat + Travaux + Frais de notaire).",

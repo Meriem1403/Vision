@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Régénère supabase/seed.sql + seed_data.json depuis VISION PATRIMOINE 030425.xlsx"""
+"""Régénère supabase/seed.sql + seed_data.json depuis VISION PATRIMOINE 030425.xlsx
+
+Modèle Excel (onglets Amort Beneduc / Troika) :
+  CRD(mois) = max(0, CRD_réf − mensualité × mois_depuis_début)
+où CRD_réf = colonne E à la 1ʳᵉ échéance du tableau d’amort (nov. 2022 pour Beneduc/Troika).
+
+Les prêts à taux (ex. Bd Libération 3,3 %, RP ~3,76 %) pourront être saisis en RATE_BASED
+plus tard ; l’app génère alors le tableau via loanCalculator.
+"""
 import json, re, uuid
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +21,14 @@ ROOT = Path(__file__).resolve().parents[1]
 XLSX = ROOT / "VISION PATRIMOINE 030425.xlsx"
 OUT_JSON = ROOT / "supabase" / "seed_data.json"
 OUT_SQL = ROOT / "supabase" / "seed.sql"
+
+# 1ʳᵉ ligne des tableaux d’amort Excel (= date où la colonne E est vraie)
+AMORT_START = {
+    "beneduc": "2022-11-01",
+    "troika": "2022-11-01",
+    "lavista": "2023-05-01",
+    "rp": "2024-11-01",
+}
 
 def uid(s: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"vision:{s}"))
@@ -32,6 +48,11 @@ def parse_fin(v):
         if mo and yy:
             return f"20{yy.group(1)}-{mo:02d}-01"
     return None
+
+def months_between(a: str, b: str) -> int:
+    ya, ma, _ = map(int, a.split("-"))
+    yb, mb, _ = map(int, b.split("-"))
+    return (yb - ya) * 12 + (mb - ma)
 
 def split_addr(addr):
     addr = " ".join(str(addr).split())
@@ -54,6 +75,7 @@ def main():
     out = {"entities": [], "properties": []}
     for e in entities_def:
         out["entities"].append({k: e[k] for k in ["slug","name","shortName","type","creation","valeurEstimee","color","gradient","shareholders"]})
+        debut = AMORT_START[e["slug"]]
         for r in e["rows"]:
             b, c, d = ws[f"B{r}"].value, ws[f"C{r}"].value, ws[f"D{r}"].value
             Ev, Fv, G, H = ws[f"E{r}"].value, ws[f"F{r}"].value, ws[f"G{r}"].value, ws[f"H{r}"].value
@@ -61,6 +83,7 @@ def main():
             if not b or str(b).upper() == "TOTAL":
                 continue
             address, cp, ville = split_addr(b)
+            # Colonne E = CRD à la 1ʳᵉ échéance du tableau d’amort (pas le montant d’achat)
             crd_ref = float(Ev) if isinstance(Ev, (int, float)) else (float(Fv) if isinstance(Fv, (int, float)) else 0)
             crd_proj = float(Fv) if isinstance(Fv, (int, float)) else crd_ref
             prop = {
@@ -74,9 +97,20 @@ def main():
             }
             mens = float(H) if isinstance(H, (int, float)) else 0
             if mens > 0 or crd_ref > 0:
+                fin = parse_fin(L)
+                duree = months_between(debut, fin) if fin else 0
+                # capital_restant au seed = vérif Excel à la date de projection par défaut ;
+                # l’app recalcule dynamiquement via projectFlatCrd
                 prop["credit"] = {
-                    "banque": "À préciser", "montantInitial": round(crd_ref, 2), "taux": 0, "duree": 0, "debut": None,
-                    "mensualite": round(mens, 2), "capitalRestant": round(crd_proj, 2), "finCredit": parse_fin(L),
+                    "banque": "À préciser",
+                    "montantInitial": round(crd_ref, 2),
+                    "taux": 0,
+                    "duree": max(0, duree),
+                    "debut": debut,
+                    "mensualite": round(mens, 2),
+                    "capitalRestant": round(crd_proj, 2),
+                    "finCredit": fin,
+                    "amortizationModel": "EXCEL_FLAT",
                 }
             out["properties"].append(prop)
 
@@ -85,6 +119,7 @@ def main():
     lines = [
         "-- Vision Patrimoine — seed depuis VISION PATRIMOINE 030425.xlsx",
         "-- Régénéré par scripts/excel_to_seed.py",
+        "-- Modèle EXCEL_FLAT : CRD = CRD_réf − mensualité × mois (comme Amort Beneduc/Troika)",
         "truncate table amortization_entries, loans, tenants, properties, shareholders, bank_dossiers, alerts, legal_entities cascade;",
         "",
     ]
@@ -110,13 +145,15 @@ def main():
         c = p.get("credit")
         if c:
             fin = f"'{c['finCredit']}'::date" if c.get("finCredit") else "null"
+            debut = f"'{c['debut']}'::date" if c.get("debut") else "null"
+            model = c.get("amortizationModel", "EXCEL_FLAT")
             lines.append(
-                f"insert into loans (id, property_id, banque, montant_initial, taux_annuel, duree_mois, date_debut, assurance_mensuelle, mensualite, capital_restant, fin_credit) values "
-                f"('{uid(f'loan:{p['entitySlug']}:{p['address']}')}', '{pid}', $${c['banque']}$$, {c['montantInitial']}, {c['taux']}, {c['duree']}, null, 0, {c['mensualite']}, {c['capitalRestant']}, {fin});"
+                f"insert into loans (id, property_id, banque, montant_initial, taux_annuel, duree_mois, date_debut, assurance_mensuelle, mensualite, capital_restant, fin_credit, amortization_model) values "
+                f"('{uid(f'loan:{p['entitySlug']}:{p['address']}')}', '{pid}', $${c['banque']}$$, {c['montantInitial']}, {c['taux']}, {c['duree']}, {debut}, 0, {c['mensualite']}, {c['capitalRestant']}, {fin}, '{model}');"
             )
         lines.append("")
     lines.append(
-        f"insert into alerts (id, type, title, detail, severity) values ('{uid('alert:1')}', 'info', 'Données importées depuis Excel', 'Patrimoine Vision — fichier du 03/04/2025.', 'low');"
+        f"insert into alerts (id, type, title, detail, severity) values ('{uid('alert:1')}', 'info', 'Données importées depuis Excel', 'Patrimoine Vision — amortissement flat aligné Excel (CRD − mensualité).', 'low');"
     )
     OUT_SQL.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"OK → {OUT_JSON.name}, {OUT_SQL.name} ({len(out['properties'])} biens)")

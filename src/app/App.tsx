@@ -98,7 +98,7 @@ const PATRIMOINE_DATA = [
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 const uid = () => `id_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-const cashFlow = (p: Property) => Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - p.assurance / 12);
+const cashFlow = (p: Property) => Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12);
 const finCredit = (c: Credit) => {
   if (c.finCredit) {
     const d = new Date(c.finCredit);
