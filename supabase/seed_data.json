@@ -98,7 +98,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "LCL",
         "montantInitial": 42620.35,
         "taux": 0,
         "duree": 102,
@@ -125,7 +125,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "Crédit Agricole",
         "montantInitial": 33327.18,
         "taux": 0,
         "duree": 103,
@@ -152,7 +152,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "BNP Paribas",
         "montantInitial": 19327.18,
         "taux": 0,
         "duree": 0,
@@ -179,7 +179,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "LCL",
         "montantInitial": 59906.01,
         "taux": 0,
         "duree": 147,
@@ -206,7 +206,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "Crédit Agricole",
         "montantInitial": 98329.49,
         "taux": 0,
         "duree": 183,
@@ -233,7 +233,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "BNP Paribas",
         "montantInitial": 68990.0,
         "taux": 0,
         "duree": 183,
@@ -260,7 +260,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "LCL",
         "montantInitial": 332569.0,
         "taux": 0,
         "duree": 106,
@@ -287,7 +287,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "Crédit Agricole",
         "montantInitial": 103262.68,
         "taux": 0,
         "duree": 162,
@@ -314,7 +314,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "BNP Paribas",
         "montantInitial": 76008.0,
         "taux": 0,
         "duree": 154,
@@ -341,7 +341,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "LCL",
         "montantInitial": 41288.94,
         "taux": 0,
         "duree": 155,
@@ -368,7 +368,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "Crédit Agricole",
         "montantInitial": 95000.0,
         "taux": 0,
         "duree": 143,
@@ -395,7 +395,7 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "À préciser",
+        "banque": "BNP Paribas",
         "montantInitial": 90000.0,
         "taux": 0,
         "duree": 150,
@@ -422,7 +422,7 @@
       "assurance": 0,
       "surface": 140,
       "credit": {
-        "banque": "À préciser",
+        "banque": "LCL",
         "montantInitial": 266771.42,
         "taux": 0,
         "duree": 299,

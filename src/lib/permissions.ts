@@ -35,10 +35,18 @@ export function canManageData(user: AuthUser) {
   return user.role === "GERANT";
 }
 
+export function normalizePerson(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 export function entityAccessible(user: AuthUser, sci: SCI) {
   if (isGerant(user)) return true;
-  if (isAssocie(user) && user.shareholderName) {
-    return sci.associes.some((a) => a.name === user.shareholderName);
+  if (isAssocie(user)) {
+    const candidates = [user.shareholderName, user.name].filter(Boolean) as string[];
+    if (!candidates.length) return false;
+    return sci.associes.some((a) =>
+      candidates.some((c) => normalizePerson(a.name) === normalizePerson(c)),
+    );
   }
   return false;
 }
