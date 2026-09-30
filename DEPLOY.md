@@ -27,7 +27,7 @@ Pour chaque compte, passer des **User Metadata** (raw_user_meta_data) :
 
 | Email | role | name | first_name | initials | bank_name | shareholder_name |
 |-------|------|------|------------|----------|-----------|------------------|
-| johann@… | `GERANT` | Johann Faraut | Johann | JF | | |
+| johann@… | `GERANT` | Johann Faraut | Johann | JF | | Johann Faraut |
 | alexandre@… | `ASSOCIE` | Alexandre Niel | Alexandre | AN | | Alexandre Niel |
 | lcl@… | `BANQUE` | LCL | LCL | LC | LCL | |
 
