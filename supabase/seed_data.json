@@ -1,0 +1,440 @@
+{
+  "entities": [
+    {
+      "slug": "beneduc",
+      "name": "SCI IR BENEDUC",
+      "shortName": "BENEDUC",
+      "type": "IR",
+      "creation": "",
+      "valeurEstimee": 380000,
+      "color": "#60a5fa",
+      "gradient": "from-blue-500/20 to-transparent",
+      "shareholders": [
+        [
+          "Johann Faraut",
+          50
+        ],
+        [
+          "Alexandre Niel",
+          50
+        ]
+      ],
+      "proj": {
+        "month": 3,
+        "year": 2026
+      }
+    },
+    {
+      "slug": "troika",
+      "name": "SCI IR TROIKA",
+      "shortName": "TROIKA",
+      "type": "IR",
+      "creation": "",
+      "valeurEstimee": 1265000,
+      "color": "#a78bfa",
+      "gradient": "from-violet-500/20 to-transparent",
+      "shareholders": [
+        [
+          "Johann Faraut",
+          33
+        ],
+        [
+          "Alexandre Niel",
+          67
+        ]
+      ],
+      "proj": {
+        "month": 10,
+        "year": 2025
+      }
+    },
+    {
+      "slug": "lavista",
+      "name": "SCI IS LA VISTA",
+      "shortName": "LA VISTA",
+      "type": "IS",
+      "creation": "",
+      "valeurEstimee": 390000,
+      "color": "#22d3ee",
+      "gradient": "from-cyan-500/20 to-transparent",
+      "shareholders": [
+        [
+          "Johann Faraut",
+          33
+        ],
+        [
+          "Alexandre Niel",
+          67
+        ]
+      ],
+      "proj": {
+        "month": 10,
+        "year": 2025
+      }
+    },
+    {
+      "slug": "rp",
+      "name": "Résidence Principale",
+      "shortName": "RP",
+      "type": "RP",
+      "creation": "",
+      "valeurEstimee": 630000,
+      "color": "#34d399",
+      "gradient": "from-emerald-500/20 to-transparent",
+      "shareholders": [
+        [
+          "Johann Faraut",
+          66
+        ],
+        [
+          "Alexandre Niel",
+          34
+        ]
+      ],
+      "proj": {
+        "month": 10,
+        "year": 2025
+      }
+    }
+  ],
+  "properties": [
+    {
+      "entitySlug": "beneduc",
+      "address": "22 RUE SERY",
+      "ville": "Marseille",
+      "cp": "13003",
+      "type": "TYPE 2/3",
+      "lots": 1,
+      "loyer": 534.0,
+      "taxeFonciere": 410.0,
+      "valeurActuelle": 85000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 42620.35,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 440.18,
+        "capitalRestant": 25013.15,
+        "finCredit": "2031-05-01"
+      }
+    },
+    {
+      "entitySlug": "beneduc",
+      "address": "47 RUE DANTON RDC",
+      "ville": "Marseille",
+      "cp": "13003",
+      "type": "TYPE 2/3",
+      "lots": 2,
+      "loyer": 450.0,
+      "taxeFonciere": 285.0,
+      "valeurActuelle": 60000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 33327.18,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 175.0,
+        "capitalRestant": 33327.18,
+        "finCredit": "2031-06-01"
+      }
+    },
+    {
+      "entitySlug": "beneduc",
+      "address": "47 RUE DANTON 1er",
+      "ville": "Marseille",
+      "cp": "13003",
+      "type": "TYPE 2+TERRASSE",
+      "lots": 1,
+      "loyer": 450.0,
+      "taxeFonciere": 285.0,
+      "valeurActuelle": 0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 19327.18,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 175.0,
+        "capitalRestant": 19327.18,
+        "finCredit": null
+      }
+    },
+    {
+      "entitySlug": "beneduc",
+      "address": "4 RUE MIREILLE",
+      "ville": "Aubagne",
+      "cp": "13400",
+      "type": "TYPE 2",
+      "lots": 1,
+      "loyer": 566.0,
+      "taxeFonciere": 530.0,
+      "valeurActuelle": 85000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 59906.01,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 432.7,
+        "capitalRestant": 42598.01,
+        "finCredit": "2035-02-01"
+      }
+    },
+    {
+      "entitySlug": "beneduc",
+      "address": "25 BD NOTRE DAME",
+      "ville": "Marseille",
+      "cp": "13006",
+      "type": "TYPE 1+TERRASSE",
+      "lots": 1,
+      "loyer": 540.0,
+      "taxeFonciere": 700.0,
+      "valeurActuelle": 150000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 98329.49,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 629.29,
+        "capitalRestant": 73157.89,
+        "finCredit": "2038-02-01"
+      }
+    },
+    {
+      "entitySlug": "beneduc",
+      "address": "221 BD LIBERATION",
+      "ville": "Marseille",
+      "cp": "13004",
+      "type": "TYPE 1",
+      "lots": 1,
+      "loyer": 425.0,
+      "taxeFonciere": 495.0,
+      "valeurActuelle": 115000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 68990.0,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 590.28,
+        "capitalRestant": 68990.0,
+        "finCredit": "2038-02-01"
+      }
+    },
+    {
+      "entitySlug": "troika",
+      "address": "23 RUE ROGER SCHIAFFINI",
+      "ville": "Marseille",
+      "cp": "13003",
+      "type": "IMMEUBLE 8LOTS",
+      "lots": 8,
+      "loyer": 5035.0,
+      "taxeFonciere": 2600.0,
+      "valeurActuelle": 670000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 332569.0,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 3310.05,
+        "capitalRestant": 216717.25,
+        "finCredit": "2031-09-01"
+      }
+    },
+    {
+      "entitySlug": "troika",
+      "address": "23 RUE ANTOINE MAILLE",
+      "ville": "Marseille",
+      "cp": "13005",
+      "type": "T2 + Terrasse",
+      "lots": 1,
+      "loyer": 740.0,
+      "taxeFonciere": 835.0,
+      "valeurActuelle": 145000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 103262.68,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 854.55,
+        "capitalRestant": 73353.43,
+        "finCredit": "2036-05-01"
+      }
+    },
+    {
+      "entitySlug": "troika",
+      "address": "13 RUE ROUSSEL DORIA",
+      "ville": "Marseille",
+      "cp": "13004",
+      "type": "2 T2 et 1 T1",
+      "lots": 3,
+      "loyer": 1993.0,
+      "taxeFonciere": 1400.0,
+      "valeurActuelle": 360000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 76008.0,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 528.0,
+        "capitalRestant": 57528.0,
+        "finCredit": "2035-09-01"
+      }
+    },
+    {
+      "entitySlug": "troika",
+      "address": "13 RUE ROGER SCHIAFFINI",
+      "ville": "Marseille",
+      "cp": "13003",
+      "type": "TYPE 2/3",
+      "lots": 1,
+      "loyer": 0,
+      "taxeFonciere": 290.0,
+      "valeurActuelle": 90000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 41288.94,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 287.44,
+        "capitalRestant": 31228.54,
+        "finCredit": "2035-10-01"
+      }
+    },
+    {
+      "entitySlug": "lavista",
+      "address": "Maison Mathieu",
+      "ville": "Marseille",
+      "cp": "13000",
+      "type": "Local professionnel",
+      "lots": 1,
+      "loyer": 1198.8,
+      "taxeFonciere": 1750.0,
+      "valeurActuelle": 230000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 95000.0,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 877.0,
+        "capitalRestant": 79463.68,
+        "finCredit": "2035-04-01"
+      }
+    },
+    {
+      "entitySlug": "lavista",
+      "address": "221 bd de la libération",
+      "ville": "Marseille",
+      "cp": "13000",
+      "type": "Local commercial",
+      "lots": 1,
+      "loyer": 1000.0,
+      "taxeFonciere": 0.0,
+      "valeurActuelle": 160000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 0,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 90000.0,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 916.99,
+        "capitalRestant": 86260.81,
+        "finCredit": "2035-11-01"
+      }
+    },
+    {
+      "entitySlug": "rp",
+      "address": "33 chemin du petit pin vert",
+      "ville": "Marseille",
+      "cp": "13000",
+      "type": "Maison 140m2",
+      "lots": 1,
+      "loyer": 840.0,
+      "taxeFonciere": 2400.0,
+      "valeurActuelle": 630000.0,
+      "prixAchat": 0,
+      "travaux": 0,
+      "fraisNotaire": 0,
+      "assurance": 0,
+      "surface": 140,
+      "credit": {
+        "banque": "À préciser",
+        "montantInitial": 266771.42,
+        "taux": 0,
+        "duree": 0,
+        "debut": null,
+        "mensualite": 835.75,
+        "capitalRestant": 266725.42,
+        "finCredit": "2049-10-01"
+      }
+    }
+  ]
+}

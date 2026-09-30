@@ -11,12 +11,7 @@ export interface AuthUser {
   shareholderName?: string | null;
 }
 
-const TOKEN_KEY = "vision_auth_token";
 const USER_KEY = "vision_auth_user";
-
-export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
 
 export function getStoredUser(): AuthUser | null {
   const raw = localStorage.getItem(USER_KEY);
@@ -28,14 +23,23 @@ export function getStoredUser(): AuthUser | null {
   }
 }
 
-export function storeSession(token: string, user: AuthUser) {
-  localStorage.setItem(TOKEN_KEY, token);
+export function storeUser(user: AuthUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem("vision_auth_token");
+}
+
+/** @deprecated prefer storeUser — kept for API token path */
+export function storeSession(token: string, user: AuthUser) {
+  localStorage.setItem("vision_auth_token", token);
+  storeUser(user);
+}
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem("vision_auth_token");
 }
 
 export function roleLabel(role: UserRole): string {

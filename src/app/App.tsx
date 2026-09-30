@@ -28,11 +28,13 @@ import { ChartTooltipContent, chartAxisTick, chartGridStroke } from "@/app/compo
 import { MetricLabel } from "@/app/components/MetricWithFormula";
 import { TooltipProvider } from "@/app/components/ui/tooltip";
 import type { AuthUser } from "@/lib/auth";
-import { clearSession, getStoredToken, getStoredUser, greetingLabel, roleLabel, storeSession } from "@/lib/auth";
+import { clearSession, getStoredUser, greetingLabel, roleLabel, storeUser } from "@/lib/auth";
 import {
   canAccessView, canManageData, defaultViewForRole, filterProperties, filterScisWithProperties,
-  PAGE_TITLES, type View,
+  associeShareRatio, PAGE_TITLES, type View,
 } from "@/lib/permissions";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { fetchPortfolio, supabaseGetSessionUser, supabaseLogout } from "@/lib/supabaseRepo";
 import {
   applyVisionTheme, loadThemeId, loadCustomColors, getPresetVars, customToVars,
   type CustomThemeColors,
@@ -52,9 +54,9 @@ type CrudMode = "list" | "create" | "edit";
 
 const SCIS_INIT: SCI[] = [
   { id: "beneduc", name: "SCI IR BENEDUC", shortName: "BENEDUC", type: "IR", creation: "Janv. 2017", valeurEstimee: 380000, color: "#60a5fa", gradient: "from-blue-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 50 }, { name: "Alexandre Niel", parts: 50 }] },
-  { id: "troika", name: "SCI IR TROIKA", shortName: "TROIKA", type: "IR", creation: "Juin 2017", valeurEstimee: 1265000, color: "#a78bfa", gradient: "from-violet-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 50 }, { name: "Alexandre Niel", parts: 50 }] },
-  { id: "lavista", name: "SCI IS LA VISTA", shortName: "LA VISTA", type: "IS", creation: "Mars 2020", valeurEstimee: 390000, color: "#22d3ee", gradient: "from-cyan-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 60 }, { name: "Alexandre Niel", parts: 40 }] },
-  { id: "rp", name: "Résidence Principale", shortName: "RP", type: "RP", creation: "Mai 2019", valeurEstimee: 630000, color: "#34d399", gradient: "from-emerald-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 50 }, { name: "Alexandre Niel", parts: 50 }] },
+  { id: "troika", name: "SCI IR TROIKA", shortName: "TROIKA", type: "IR", creation: "Juin 2017", valeurEstimee: 1265000, color: "#a78bfa", gradient: "from-violet-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 33 }, { name: "Alexandre Niel", parts: 67 }] },
+  { id: "lavista", name: "SCI IS LA VISTA", shortName: "LA VISTA", type: "IS", creation: "Mars 2020", valeurEstimee: 390000, color: "#22d3ee", gradient: "from-cyan-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 33 }, { name: "Alexandre Niel", parts: 67 }] },
+  { id: "rp", name: "Résidence Principale", shortName: "RP", type: "RP", creation: "Mai 2019", valeurEstimee: 630000, color: "#34d399", gradient: "from-emerald-500/20 to-transparent", associes: [{ name: "Johann Faraut", parts: 66 }, { name: "Alexandre Niel", parts: 34 }] },
 ];
 const PROPS_INIT: Property[] = [
   { id: "p1", sciId: "beneduc", address: "14 Rue Séry", ville: "Lille", cp: "59000", type: "T2", surface: 45, lots: 1, prixAchat: 80000, travaux: 12000, fraisNotaire: 6500, valeurActuelle: 130000, loyer: 620, taxeFonciere: 850, assurance: 540, credit: { banque: "Crédit Agricole", montantInitial: 70000, taux: 1.80, duree: 180, mensualite: 440, debut: "2018-03-01", capitalRestant: 32000 } },
@@ -212,11 +214,50 @@ function DelConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: 
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 
-function DashboardView({ properties, scis, onSelectProperty }: { properties: Property[]; scis: SCI[]; onSelectProperty: (id: string) => void }) {
+function personalShareName(user?: AuthUser | null): string | null {
+  if (!user) return null;
+  if (user.role === "BANQUE") return null;
+  return user.shareholderName || user.name || null;
+}
+
+function sciShareRatio(sci: SCI, shareholderName: string): number {
+  return associeShareRatio(sci, shareholderName);
+}
+
+function DashboardView({
+  properties, scis, onSelectProperty, user,
+}: {
+  properties: Property[];
+  scis: SCI[];
+  onSelectProperty: (id: string) => void;
+  user?: AuthUser | null;
+}) {
+  const shareName = personalShareName(user);
   const totalBrut = scis.reduce((s, x) => s + x.valeurEstimee, 0);
   const totalDette = properties.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
   const loyers = properties.reduce((s, p) => s + p.loyer * 12, 0);
   const cf = properties.reduce((s, p) => s + cashFlow(p), 0);
+
+  const personal = shareName
+    ? scis.reduce(
+        (acc, sci) => {
+          const ratio = sciShareRatio(sci, shareName);
+          const props = properties.filter((p) => p.sciId === sci.id);
+          const dette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
+          const mens = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0), 0);
+          const cash = props.reduce((s, p) => s + cashFlow(p), 0);
+          const loy = props.reduce((s, p) => s + p.loyer * 12, 0);
+          acc.brut += sci.valeurEstimee * ratio;
+          acc.dette += dette * ratio;
+          acc.mensualites += mens * ratio;
+          acc.cash += cash * ratio;
+          acc.loyers += loy * ratio;
+          return acc;
+        },
+        { brut: 0, dette: 0, mensualites: 0, cash: 0, loyers: 0 },
+      )
+    : null;
+
   const kpis = [
     { l: "Patrimoine brut", v: fmt(totalBrut), color: "#60a5fa", Icon: Building2 },
     { l: "Dette restante", v: fmt(totalDette), color: "#f87171", Icon: CreditCard },
@@ -225,6 +266,18 @@ function DashboardView({ properties, scis, onSelectProperty }: { properties: Pro
     { l: "Cash-flow / mois", v: `${cf >= 0 ? "+" : ""}${fmt(cf)}`, color: "#34d399", Icon: ArrowUpRight },
     { l: "Rendement brut", v: totalBrut > 0 ? `${(loyers / totalBrut * 100).toFixed(2)} %` : "—", color: "#fbbf24", Icon: BarChart2 },
   ];
+
+  const personalKpis = personal
+    ? [
+        { l: "Ma part — brut", v: fmt(personal.brut), color: "#60a5fa", Icon: Building2 },
+        { l: "Ma part — dette", v: fmt(personal.dette), color: "#f87171", Icon: CreditCard },
+        { l: "Ma part — net", v: fmt(personal.brut - personal.dette), color: "#34d399", Icon: TrendingUp },
+        { l: "Ma part — loyers/an", v: fmt(personal.loyers), color: "#a78bfa", Icon: Euro },
+        { l: "Ma part — cash/mois", v: `${personal.cash >= 0 ? "+" : ""}${fmt(personal.cash)}`, color: personal.cash >= 0 ? "#34d399" : "#f87171", Icon: ArrowUpRight },
+        { l: "Ma part — mensualités", v: fmt(personal.mensualites), color: "#c4b5fd", Icon: BarChart2 },
+      ]
+    : [];
+
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5 lg:space-y-6`}>
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
@@ -238,11 +291,63 @@ function DashboardView({ properties, scis, onSelectProperty }: { properties: Pro
           </motion.div>
         ))}
       </motion.div>
+
+      {personal && (
+        <motion.div variants={itemV} initial="hidden" animate="show" className={`${G} p-4 sm:p-5`}>
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
+            <div>
+              <p className={lbl}>Quote-part personnelle</p>
+              <p className="text-xs sm:text-sm vision-text-muted mt-0.5">
+                Indicateurs au prorata des parts de {shareName} dans chaque SCI
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
+            {personalKpis.map((k) => (
+              <div key={k.l} className="vision-surface rounded-xl p-3" style={{ border: `1px solid ${k.color}22` }}>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <MetricLabel label={k.l} className="mb-0 min-w-0" />
+                  <k.Icon size={14} style={{ color: k.color }} className="flex-shrink-0" />
+                </div>
+                <p className="text-sm sm:text-base font-bold font-mono truncate" style={{ color: k.color }}>{k.v}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {scis.map((sci) => {
+              const ratio = sciShareRatio(sci, shareName!);
+              const pct = Math.round(ratio * 100);
+              const props = properties.filter((p) => p.sciId === sci.id);
+              const dette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
+              return (
+                <div key={sci.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 vision-surface">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sci.color }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold vision-text truncate">{sci.shortName}</p>
+                    <p className="text-xs vision-text-muted">{pct}% · part dette {fmt(dette * ratio)}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 md:gap-5 w-full">
         <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.12 }} className={`${G} p-4 sm:p-5 xl:col-span-2 w-full min-w-0`}>
           <p className={`${lbl} mb-4`}>Répartition par entité</p>
-          <div style={{ height: 160 }}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={scis.map((s) => ({ name: s.shortName, value: s.valeurEstimee, color: s.color }))} dataKey="value" nameKey="name" innerRadius={45} outerRadius={74} paddingAngle={3}>{scis.map((s, i) => <Cell key={i} fill={s.color} opacity={0.82} />)}</Pie><Tooltip content={<ChartTooltipContent unit="currency" />} /></PieChart></ResponsiveContainer></div>
-          <div className="mt-4 space-y-2.5">{scis.map((s) => <div key={s.id} className="flex items-center gap-2.5"><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} /><span className="text-xs vision-text-muted flex-1 truncate">{s.shortName}</span><span className="text-xs font-semibold font-mono flex-shrink-0" style={{ color: s.color }}>{fmt(s.valeurEstimee)}</span></div>)}</div>
+          <div style={{ height: 160 }}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={scis.map((s) => ({ name: s.shortName, value: shareName ? s.valeurEstimee * sciShareRatio(s, shareName) : s.valeurEstimee, color: s.color }))} dataKey="value" nameKey="name" innerRadius={45} outerRadius={74} paddingAngle={3}>{scis.map((s, i) => <Cell key={i} fill={s.color} opacity={0.82} />)}</Pie><Tooltip content={<ChartTooltipContent unit="currency" />} /></PieChart></ResponsiveContainer></div>
+          <div className="mt-4 space-y-2.5">{scis.map((s) => {
+            const ratio = shareName ? sciShareRatio(s, shareName) : 1;
+            const val = s.valeurEstimee * ratio;
+            return (
+              <div key={s.id} className="flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                <span className="text-xs vision-text-muted flex-1 truncate">{s.shortName}{shareName ? ` · ${Math.round(ratio * 100)}%` : ""}</span>
+                <span className="text-xs font-semibold font-mono flex-shrink-0" style={{ color: s.color }}>{fmt(val)}</span>
+              </div>
+            );
+          })}</div>
         </motion.div>
         <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.18 }} className={`${G} p-4 sm:p-5 xl:col-span-3 w-full min-w-0`}>
           <p className={`${lbl} mb-0.5`}>Évolution du patrimoine</p>
@@ -279,7 +384,7 @@ function DashboardView({ properties, scis, onSelectProperty }: { properties: Pro
         })}
       </motion.div>
 
-      <VisionPatrimoinePanel scis={scis} properties={properties} onSelectProperty={onSelectProperty} />
+      <VisionPatrimoinePanel scis={scis} properties={properties} onSelectProperty={onSelectProperty} shareholderName={shareName} />
     </div>
   );
 }
@@ -923,13 +1028,16 @@ const ALL_NAV: { id: View; label: string; Icon: typeof LayoutDashboard }[] = [
 ];
 
 export default function App() {
+  const useSupabase = isSupabaseConfigured();
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredUser());
   const [authChecked, setAuthChecked] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [view, setView] = useState<View>("dashboard");
-  const [properties, setProperties] = useState<Property[]>(PROPS_INIT);
-  const [scis, setScis] = useState<SCI[]>(SCIS_INIT);
-  const [tenants, setTenants] = useState<Tenant[]>(TENANTS_INIT);
-  const [alerts, setAlerts] = useState<AlertItem[]>(ALERTS_INIT);
+  const [properties, setProperties] = useState<Property[]>(() => (useSupabase ? [] : PROPS_INIT));
+  const [scis, setScis] = useState<SCI[]>(() => (useSupabase ? [] : SCIS_INIT));
+  const [tenants, setTenants] = useState<Tenant[]>(() => (useSupabase ? [] : TENANTS_INIT));
+  const [alerts, setAlerts] = useState<AlertItem[]>(() => (useSupabase ? [] : ALERTS_INIT));
+  const [dataError, setDataError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => loadThemeId());
@@ -1004,69 +1112,144 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const token = getStoredToken();
-    if (!token) {
-      setAuthChecked(true);
-      return;
-    }
-    api.me()
-      .then(({ user }) => {
-        setAuthUser(user);
-        storeSession(token, user);
-        setView((v) => (canAccessView(user, v) ? v : defaultViewForRole(user.role)));
-      })
-      .catch(() => {
-        clearSession();
-        setAuthUser(null);
-      })
-      .finally(() => setAuthChecked(true));
-  }, []);
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+
+    (async () => {
+      try {
+        if (useSupabase) {
+          const hash = typeof window !== "undefined" ? window.location.hash : "";
+          const recoveryFromLink = hash.includes("type=recovery");
+          if (recoveryFromLink) setPasswordRecovery(true);
+
+          if (supabase) {
+            const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+              if (event === "PASSWORD_RECOVERY") {
+                setPasswordRecovery(true);
+                setAuthUser(null);
+              }
+            });
+            unsub = () => sub.subscription.unsubscribe();
+          }
+
+          if (recoveryFromLink) {
+            setAuthChecked(true);
+            return;
+          }
+
+          const user = await supabaseGetSessionUser();
+          if (cancelled) return;
+          if (user) {
+            storeUser(user);
+            setAuthUser(user);
+            setView((v) => (canAccessView(user, v) ? v : defaultViewForRole(user.role)));
+          } else {
+            clearSession();
+            setAuthUser(null);
+          }
+        } else {
+          const token = localStorage.getItem("vision_auth_token");
+          if (!token) {
+            setAuthChecked(true);
+            return;
+          }
+          const { user } = await api.me();
+          if (cancelled) return;
+          storeUser(user);
+          setAuthUser(user);
+          setView((v) => (canAccessView(user, v) ? v : defaultViewForRole(user.role)));
+        }
+      } catch {
+        if (!cancelled) {
+          clearSession();
+          setAuthUser(null);
+        }
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [useSupabase]);
 
   useEffect(() => {
     if (!authUser) return;
-    isApiAvailable().then(async (online) => {
-      setApiOnline(online);
-      if (!online) return;
-      try {
-        const [entities, props] = await Promise.all([api.getEntities(), api.getProperties()]);
-        if (entities.length) {
-          setScis(entities.map((e) => ({
-            id: e.id,
-            name: e.name,
-            shortName: e.shortName,
-            type: e.type,
-            creation: e.creation,
-            valeurEstimee: e.valeurEstimee,
-            color: e.color,
-            gradient: e.gradient ?? "",
-            associes: e.associes,
-          })));
-        }
-        if (props.length) {
-          setProperties(props.map((p) => ({
-            id: String(p.id),
-            sciId: String(p.sciId),
-            address: String(p.address),
-            ville: String(p.ville),
-            cp: String(p.cp),
-            type: String(p.type),
-            surface: Number(p.surface),
-            lots: Number(p.lots),
-            prixAchat: Number(p.prixAchat),
-            travaux: Number(p.travaux),
-            fraisNotaire: Number(p.fraisNotaire),
-            valeurActuelle: Number(p.valeurActuelle),
-            loyer: Number(p.loyer),
-            taxeFonciere: Number(p.taxeFonciere),
-            assurance: Number(p.assurance),
+    let cancelled = false;
+
+    (async () => {
+      if (useSupabase) {
+        try {
+          const data = await fetchPortfolio();
+          if (cancelled) return;
+          setScis(data.scis as SCI[]);
+          setProperties(data.properties.map((p) => ({
+            ...p,
             credit: p.credit ? enrichCredit(p.credit as Credit) : undefined,
           })));
+          setTenants(data.tenants as Tenant[]);
+          setAlerts(data.alerts as AlertItem[]);
+          setApiOnline(true);
+          setDataError("");
+        } catch (e) {
+          if (!cancelled) {
+            setDataError(e instanceof Error ? e.message : "Erreur chargement Supabase");
+            setApiOnline(false);
+          }
         }
-      } catch {
-        setApiOnline(false);
+        return;
       }
-    });
-  }, [authUser]);
+
+      isApiAvailable().then(async (online) => {
+        if (cancelled) return;
+        setApiOnline(online);
+        if (!online) return;
+        try {
+          const [entities, props] = await Promise.all([api.getEntities(), api.getProperties()]);
+          if (cancelled) return;
+          if (entities.length) {
+            setScis(entities.map((e) => ({
+              id: e.id,
+              name: e.name,
+              shortName: e.shortName,
+              type: e.type,
+              creation: e.creation,
+              valeurEstimee: e.valeurEstimee,
+              color: e.color,
+              gradient: e.gradient ?? "",
+              associes: e.associes,
+            })));
+          }
+          if (props.length) {
+            setProperties(props.map((p) => ({
+              id: String(p.id),
+              sciId: String(p.sciId),
+              address: String(p.address),
+              ville: String(p.ville),
+              cp: String(p.cp),
+              type: String(p.type),
+              surface: Number(p.surface),
+              lots: Number(p.lots),
+              prixAchat: Number(p.prixAchat),
+              travaux: Number(p.travaux),
+              fraisNotaire: Number(p.fraisNotaire),
+              valeurActuelle: Number(p.valeurActuelle),
+              loyer: Number(p.loyer),
+              taxeFonciere: Number(p.taxeFonciere),
+              assurance: Number(p.assurance),
+              credit: p.credit ? enrichCredit(p.credit as Credit) : undefined,
+            })));
+          }
+        } catch {
+          if (!cancelled) setApiOnline(false);
+        }
+      });
+    })();
+
+    return () => { cancelled = true; };
+  }, [authUser, useSupabase]);
 
   const handleLogin = (user: AuthUser) => {
     setAuthUser(user);
@@ -1081,9 +1264,16 @@ export default function App() {
   }, [authUser]);
 
   const handleLogout = async () => {
-    await api.logout().catch(() => {});
+    if (useSupabase) await supabaseLogout().catch(() => {});
+    else await api.logout().catch(() => {});
     clearSession();
     setAuthUser(null);
+    if (useSupabase) {
+      setScis([]);
+      setProperties([]);
+      setTenants([]);
+      setAlerts([]);
+    }
     setView("dashboard");
     closeFullPage();
     closeDrawer();
@@ -1165,8 +1355,17 @@ export default function App() {
     return <div className="min-h-dvh vision-app-bg flex items-center justify-center vision-text-muted text-sm">Chargement…</div>;
   }
 
-  if (!authUser) {
-    return <LoginPage onLogin={handleLogin} />;
+  if (!authUser || passwordRecovery) {
+    return (
+      <LoginPage
+        onLogin={(user) => {
+          setPasswordRecovery(false);
+          handleLogin(user);
+        }}
+        passwordRecovery={passwordRecovery}
+        onPasswordRecoveryDone={() => setPasswordRecovery(false)}
+      />
+    );
   }
 
   return (
@@ -1245,7 +1444,8 @@ export default function App() {
                         {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                       </span>
                     </>}
-                {!fullPageTarget && apiOnline && <span className="ml-2" style={{ color: "var(--v-positive)" }}>· API connectée</span>}
+                {!fullPageTarget && apiOnline && <span className="ml-2" style={{ color: "var(--v-positive)" }}>· {useSupabase ? "Supabase" : "API"} connectée</span>}
+                {!fullPageTarget && dataError && <span className="ml-2 vision-negative-text">· {dataError}</span>}
               </p>
             </div>
           </div>
@@ -1275,14 +1475,21 @@ export default function App() {
                 />
               ) : (
                 <>
-              {view === "dashboard" && <DashboardView properties={visibleProperties} scis={visibleScis} onSelectProperty={(id) => openPropertyDrawer(id)} />}
+              {view === "dashboard" && <DashboardView properties={visibleProperties} scis={visibleScis} user={authUser} onSelectProperty={(id) => openPropertyDrawer(id)} />}
               {view === "sci" && <SCIView scis={visibleScis} properties={visibleProperties} onAdd={canManageData(authUser) ? addSCI : () => {}} onUpdate={canManageData(authUser) ? updSCI : () => {}} onDelete={canManageData(authUser) ? delSCI : () => {}} onSelectSci={(id) => openDrawer({ kind: "sci", id })} onOpenFullPage={(id) => openFullPage({ kind: "sci", id })} />}
               {view === "biens" && <BiensView properties={visibleProperties} scis={visibleScis} onAdd={canManageData(authUser) ? addProp : () => {}} onUpdate={canManageData(authUser) ? updProp : () => {}} onDelete={canManageData(authUser) ? delProp : () => {}} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
               {view === "credits" && <CreditsView properties={visibleProperties} scis={visibleScis} onUpdateProperty={canManageData(authUser) ? updProp : () => {}} onSelectCredit={(id) => openPropertyDrawer(id, true)} onOpenFullPage={(id) => openPropertyFullPage(id, "credit")} />}
               {view === "location" && canAccessView(authUser, "location") && <LocationView tenants={visibleTenants} properties={visibleProperties} scis={visibleScis} onAdd={canManageData(authUser) ? addTenant : () => {}} onUpdate={canManageData(authUser) ? updTenant : () => {}} onDelete={canManageData(authUser) ? delTenant : () => {}} onSelectTenant={(id) => openDrawer({ kind: "tenant", id })} onOpenFullPage={(id) => openFullPage({ kind: "tenant", id })} />}
               {view === "comptabilite" && canAccessView(authUser, "comptabilite") && <ComptabiliteView properties={visibleProperties} scis={visibleScis} onSelectSci={(id) => openDrawer({ kind: "compta", sciId: id })} onOpenFullPage={(id) => openFullPage({ kind: "compta", sciId: id })} />}
               {view === "patrimoine" && <PatrimoineView properties={visibleProperties} scis={visibleScis} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
-              {view === "dossiers" && canAccessView(authUser, "dossiers") && <BankDossierView entityOptions={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName }))} />}
+              {view === "dossiers" && canAccessView(authUser, "dossiers") && (
+                <BankDossierView
+                  user={authUser}
+                  entityOptions={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
+                  properties={visibleProperties}
+                  scis={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
+                />
+              )}
               {view === "portail-banque" && canAccessView(authUser, "portail-banque") && <BankPortalView user={authUser} loans={bankLoans} />}
               {view === "alertes" && <AlertesView alerts={alerts} onDelete={canManageData(authUser) ? delAlert : () => {}} onSelectAlert={(id) => openDrawer({ kind: "alert", id })} onOpenFullPage={(id) => openFullPage({ kind: "alert", id })} />}
                 </>

@@ -14,15 +14,24 @@ const DEFAULT_PROJECTION: Record<string, { month: number; year: number }> = {
   rp: { month: 10, year: 2025 },
 };
 
-function shareRatio(sciId: string): number {
-  if (sciId === "beneduc") return 0.5;
-  if (sciId === "rp") return 0.66;
-  return 0.33;
+function shareRatioFromAssocies(sci: SCI, shareholderName?: string | null): number {
+  if (!shareholderName || !sci.associes?.length) return 1;
+  const total = sci.associes.reduce((s, a) => s + a.parts, 0);
+  const mine = sci.associes.find((a) => a.name === shareholderName)?.parts ?? 0;
+  return total > 0 ? mine / total : 0;
 }
 
 interface Credit { montantInitial: number; taux: number; duree: number; debut: string; assuranceMensuelle?: number; mensualite: number; capitalRestant: number; banque?: string }
 interface Property { id: string; sciId: string; address: string; type: string; lots: number; loyer: number; taxeFonciere: number; valeurActuelle: number; credit?: Credit }
-interface SCI { id: string; name: string; shortName: string; type: string; color: string; valeurEstimee: number }
+interface SCI {
+  id: string;
+  name: string;
+  shortName: string;
+  type: string;
+  color: string;
+  valeurEstimee: number;
+  associes?: { name: string; parts: number }[];
+}
 
 function excelCash(p: Property) {
   return Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12);
@@ -52,7 +61,12 @@ function PropertyMobileCard({ line, onSelect }: { line: { p: Property; crdRef: n
   );
 }
 
-function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properties: Property[]; onSelectProperty: (id: string) => void }) {
+function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
+  sci: SCI;
+  properties: Property[];
+  onSelectProperty: (id: string) => void;
+  shareholderName?: string | null;
+}) {
   const defaults = DEFAULT_PROJECTION[sci.id] ?? { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
   const [month, setMonth] = useState(defaults.month);
   const [year, setYear] = useState(defaults.year);
@@ -63,7 +77,11 @@ function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properti
     const crdProj = p.credit
       ? getCrdAtDate({ montantInitial: p.credit.montantInitial, tauxAnnuel: p.credit.taux, dureeMois: p.credit.duree, dateDebut: p.credit.debut, assuranceMensuelle: p.credit.assuranceMensuelle }, projection)
       : 0;
-    return { p, crdRef, crdProj, mensualite: p.credit?.mensualite ?? 0, cash: excelCash(p) };
+    // Si pas de tableau amort (import Excel: taux/durée/début absents), garder le CRD stocké
+    const crdFinal = p.credit && (!p.credit.taux || !p.credit.duree || !p.credit.debut)
+      ? (p.credit.capitalRestant ?? crdRef)
+      : crdProj;
+    return { p, crdRef, crdProj: crdFinal, mensualite: p.credit?.mensualite ?? 0, cash: excelCash(p) };
   });
 
   const totals = {
@@ -77,9 +95,11 @@ function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properti
     valeur: sci.valeurEstimee,
   };
 
-  const ratio = shareRatio(sci.id);
+  const ratio = shareRatioFromAssocies(sci, shareholderName);
   const partCredit = totals.crdProj * ratio;
   const partMensualites = totals.mensualites * ratio;
+  const partValeur = totals.valeur * ratio;
+  const pctLabel = Math.round(ratio * 100);
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`${G} overflow-hidden`} style={{ borderColor: `${sci.color}22` }}>
@@ -109,10 +129,10 @@ function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properti
           </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-4">
-          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Part crédit ({Math.round(ratio * 100)}%)</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmt(partCredit)}</p></div>
+          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Part crédit ({pctLabel}%)</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmt(partCredit)}</p></div>
           <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Mensualités part</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmtD(partMensualites)}</p></div>
+          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Part valeur ({pctLabel}%)</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 break-all" style={{ color: sci.color }}>{fmt(partValeur)}</p></div>
           <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">Cash mensuel total</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5" style={{ color: totals.cash >= 0 ? "#34d399" : "#f87171" }}>{totals.cash >= 0 ? "+" : ""}{fmt(totals.cash)}</p></div>
-          <div className="bg-black/20 rounded-xl p-2.5 sm:p-3"><p className="text-xs sm:text-sm vision-text-muted">CRD projeté</p><p className="text-xs sm:text-sm font-bold font-mono mt-0.5 vision-negative-text break-all">{fmt(totals.crdProj)}</p></div>
         </div>
       </div>
 
@@ -178,21 +198,32 @@ function EntityBlock({ sci, properties, onSelectProperty }: { sci: SCI; properti
   );
 }
 
-export function VisionPatrimoinePanel({ scis, properties, onSelectProperty }: {
+export function VisionPatrimoinePanel({ scis, properties, onSelectProperty, shareholderName }: {
   scis: SCI[];
   properties: Property[];
   onSelectProperty: (id: string) => void;
+  shareholderName?: string | null;
 }) {
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <div className={`${G} px-4 sm:px-6 py-4`}>
         <p className={lbl}>Vision patrimoine</p>
-        <p className="text-xs sm:text-sm vision-text-muted">Projection par SCI — sélecteurs accessibles, tableau sur grand écran, cartes sur mobile.</p>
+        <p className="text-xs sm:text-sm vision-text-muted">
+          Projection par SCI{shareholderName ? ` · quote-part ${shareholderName}` : ""} — sélecteurs accessibles, tableau sur grand écran, cartes sur mobile.
+        </p>
       </div>
       {scis.map((sci) => {
         const props = properties.filter((p) => p.sciId === sci.id);
         if (props.length === 0) return null;
-        return <EntityBlock key={sci.id} sci={sci} properties={props} onSelectProperty={onSelectProperty} />;
+        return (
+          <EntityBlock
+            key={sci.id}
+            sci={sci}
+            properties={props}
+            onSelectProperty={onSelectProperty}
+            shareholderName={shareholderName}
+          />
+        );
       })}
       <div className={pageEndSpacer} aria-hidden />
     </div>
