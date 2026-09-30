@@ -52,7 +52,7 @@ as $$
   select s.entity_id
   from shareholders s
   join profiles p on p.id = auth.uid() and p.role = 'ASSOCIE'
-  where s.name = p.shareholder_name;
+  where lower(trim(s.name)) = lower(trim(coalesce(p.shareholder_name, p.name)));
 $$;
 
 -- PROFILES

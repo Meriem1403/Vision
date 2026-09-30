@@ -102,7 +102,7 @@ def main():
                 # capital_restant au seed = vérif Excel à la date de projection par défaut ;
                 # l’app recalcule dynamiquement via projectFlatCrd
                 prop["credit"] = {
-                    "banque": "À préciser",
+                    "banque": "À préciser",  # remplacé plus bas par rotation LCL/CA/BNP
                     "montantInitial": round(crd_ref, 2),
                     "taux": 0,
                     "duree": max(0, duree),
@@ -113,6 +113,13 @@ def main():
                     "amortizationModel": "EXCEL_FLAT",
                 }
             out["properties"].append(prop)
+
+    banks = ["LCL", "Crédit Agricole", "BNP Paribas"]
+    bi = 0
+    for prop in out["properties"]:
+        if "credit" in prop:
+            prop["credit"]["banque"] = banks[bi % 3]
+            bi += 1
 
     OUT_JSON.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
 
