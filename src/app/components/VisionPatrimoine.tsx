@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "motion/react";
 import { getCrdAtDate, hasAmortizationInputs, projectImportedCrd } from "@/lib/loanCalculator";
 import { pageWrap, pageEndSpacer, G, lbl } from "./layout";
-import { GSelect, monthOptions, yearOptions } from "./GSelect";
+import { GSelect, monthOptions, buildYearOptions } from "./GSelect";
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 const fmtD = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
@@ -102,6 +102,21 @@ function PropertyMobileCard({ line, onSelect }: { line: { p: Property; crdRef: n
   );
 }
 
+function creditEndYear(c: Credit): number | null {
+  if (c.finCredit) {
+    const d = new Date(c.finCredit);
+    if (!Number.isNaN(d.getTime())) return d.getFullYear();
+  }
+  if (c.debut && c.duree) {
+    const d = new Date(c.debut);
+    if (!Number.isNaN(d.getTime())) {
+      d.setMonth(d.getMonth() + c.duree);
+      return d.getFullYear();
+    }
+  }
+  return null;
+}
+
 function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
   sci: SCI;
   properties: Property[];
@@ -113,6 +128,13 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
   const [year, setYear] = useState(defaults.year);
   const projection = new Date(year, month - 1, 1);
   const refDate = new Date(defaults.year, defaults.month - 1, 1);
+
+  const endYears = properties
+    .map((p) => (p.credit ? creditEndYear(p.credit) : null))
+    .filter((y): y is number => y != null);
+  const maxCreditYear = endYears.length ? Math.max(...endYears) : defaults.year;
+  const minYear = Math.min(2024, defaults.year, year);
+  const yearOpts = buildYearOptions(minYear, Math.max(maxCreditYear, defaults.year, year));
 
   const lines = properties.map((p) => {
     const crdRef = p.credit?.montantInitial ?? 0;
@@ -159,7 +181,7 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
               aria-label="Année de projection"
               value={year}
               onChange={(e) => setYear(+e.target.value)}
-              options={yearOptions}
+              options={yearOpts}
               wrapperClassName="w-full"
             />
           </div>

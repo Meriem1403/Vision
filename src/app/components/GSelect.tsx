@@ -48,7 +48,14 @@ export const monthOptions = [
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ].map((m, i) => ({ value: i + 1, label: m }));
 
-export const yearOptions = [2024, 2025, 2026, 2027, 2028, 2030, 2035].map((y) => ({
-  value: y,
-  label: String(y),
-}));
+/** Années continues de `from` à `to` inclus (pour projection jusqu’à CRD = 0). */
+export function buildYearOptions(from: number, to: number) {
+  const start = Math.min(from, to);
+  const end = Math.max(from, to);
+  const years: number[] = [];
+  for (let y = start; y <= end; y++) years.push(y);
+  return years.map((y) => ({ value: y, label: String(y) }));
+}
+
+/** @deprecated préférer buildYearOptions selon la fin des crédits */
+export const yearOptions = buildYearOptions(2024, 2035);
