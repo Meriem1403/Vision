@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { getCrdAtDate, hasAmortizationInputs, projectImportedCrd } from "@/lib/loanCalculator";
+import { getCrdAtDate, hasAmortizationInputs, monthsBetween, projectImportedCrd } from "@/lib/loanCalculator";
 import { pageWrap, pageEndSpacer, G, lbl } from "./layout";
 import { GSelect, monthOptions, buildYearOptions } from "./GSelect";
 
@@ -117,6 +117,33 @@ function creditEndYear(c: Credit): number | null {
   return null;
 }
 
+/** Première échéance : date de début, sinon estimation linéaire jusqu’à la fin de prêt. */
+function creditStartYear(c: Credit, refDate: Date): number | null {
+  if (c.debut) {
+    const d = new Date(c.debut);
+    if (!Number.isNaN(d.getTime())) return d.getFullYear();
+  }
+  if (!c.finCredit) return null;
+  const fin = new Date(c.finCredit);
+  if (Number.isNaN(fin.getTime())) return null;
+  const finMonth = new Date(fin.getFullYear(), fin.getMonth(), 1);
+  const leftAtRef = monthsBetween(refDate, finMonth);
+  const crdAtRef = c.capitalRestant || 0;
+  const crdStart = c.montantInitial || crdAtRef;
+
+  let totalMonths: number | null = null;
+  if (crdAtRef > 0 && leftAtRef > 0) {
+    const amort = crdAtRef / leftAtRef;
+    if (amort > 0) totalMonths = Math.max(leftAtRef, Math.round(crdStart / amort));
+  } else if (c.mensualite > 0 && crdStart > 0) {
+    totalMonths = Math.max(1, Math.round(crdStart / c.mensualite));
+  }
+  if (!totalMonths) return null;
+  const start = new Date(finMonth);
+  start.setMonth(start.getMonth() - totalMonths);
+  return start.getFullYear();
+}
+
 function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
   sci: SCI;
   properties: Property[];
@@ -129,12 +156,19 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
   const projection = new Date(year, month - 1, 1);
   const refDate = new Date(defaults.year, defaults.month - 1, 1);
 
+  const startYears = properties
+    .map((p) => (p.credit ? creditStartYear(p.credit, refDate) : null))
+    .filter((y): y is number => y != null);
   const endYears = properties
     .map((p) => (p.credit ? creditEndYear(p.credit) : null))
     .filter((y): y is number => y != null);
+
+  const minCreditYear = startYears.length ? Math.min(...startYears) : defaults.year;
   const maxCreditYear = endYears.length ? Math.max(...endYears) : defaults.year;
-  const minYear = Math.min(2024, defaults.year, year);
-  const yearOpts = buildYearOptions(minYear, Math.max(maxCreditYear, defaults.year, year));
+  const yearOpts = buildYearOptions(
+    Math.min(minCreditYear, defaults.year, year),
+    Math.max(maxCreditYear, defaults.year, year),
+  );
 
   const lines = properties.map((p) => {
     const crdRef = p.credit?.montantInitial ?? 0;
