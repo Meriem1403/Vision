@@ -1,9 +1,38 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mail, MapPin, Phone, Shield, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mail, MapPin, Pencil, Phone, Shield, AlertTriangle, Trash2 } from "lucide-react";
 import { MetricLabel } from "./MetricWithFormula";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, metricsGridPage, tableScroll, mobileDetailCard, G, lbl } from "./layout";
 import type { AlertItem, Property, SCI, Tenant } from "./entityTypes";
+
+function FullPageCrudActions({ onEdit, onDelete }: { onEdit?: () => void; onDelete?: () => void }) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  if (!onEdit && !onDelete) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
+      {onEdit && (
+        <button type="button" onClick={onEdit} className={`${fullPageBtn} sm:w-auto`}>
+          <Pencil size={14} />
+          <span>Modifier</span>
+        </button>
+      )}
+      {onDelete && (
+        confirmDel ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs vision-negative-text whitespace-nowrap">Supprimer ?</span>
+            <button type="button" onClick={onDelete} className="min-h-[44px] px-3 rounded-xl bg-red-500/80 text-white text-xs font-bold">Oui</button>
+            <button type="button" onClick={() => setConfirmDel(false)} className={`${fullPageBtn} sm:w-auto`}>Non</button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setConfirmDel(true)} className={`${fullPageBtn} sm:w-auto vision-negative-text`}>
+            <Trash2 size={14} />
+            <span>Supprimer</span>
+          </button>
+        )
+      )}
+    </div>
+  );
+}
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 
@@ -128,16 +157,25 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
   );
 }
 
-export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProperty }: {
+export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProperty, onEdit, onDelete }: {
   sci: SCI;
   properties: Property[];
   backLabel: string;
   onBack: () => void;
   onSelectProperty?: (id: string) => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const props = properties.filter((p) => p.sciId === sci.id);
   return (
-    <FullPageShell backLabel={backLabel} onBack={onBack} title={sci.name} subtitle={`${sci.creation} · ${sci.type} · ${props.length} bien${props.length > 1 ? "s" : ""}`} color={sci.color}>
+    <FullPageShell
+      backLabel={backLabel}
+      onBack={onBack}
+      title={sci.name}
+      subtitle={`${sci.creation} · ${sci.type} · ${props.length} bien${props.length > 1 ? "s" : ""}`}
+      color={sci.color}
+      headerExtra={<FullPageCrudActions onEdit={onEdit} onDelete={onDelete} />}
+    >
       <SciDetailContent sci={sci} properties={properties} variant="page" />
       {props.length > 0 && (
         <div className="mt-6 min-w-0">
@@ -233,15 +271,24 @@ export function TenantDetailContent({ tenant, property, sci, variant = "drawer" 
   );
 }
 
-export function TenantDetailPage({ tenant, property, sci, backLabel, onBack }: {
+export function TenantDetailPage({ tenant, property, sci, backLabel, onBack, onEdit, onDelete }: {
   tenant: Tenant;
   property?: Property;
   sci: SCI;
   backLabel: string;
   onBack: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   return (
-    <FullPageShell backLabel={backLabel} onBack={onBack} title={tenant.nom} subtitle={`Locataire · ${sci.shortName}`} color={sci.color}>
+    <FullPageShell
+      backLabel={backLabel}
+      onBack={onBack}
+      title={tenant.nom}
+      subtitle={`Locataire · ${sci.shortName}`}
+      color={sci.color}
+      headerExtra={<FullPageCrudActions onEdit={onEdit} onDelete={onDelete} />}
+    >
       <TenantDetailContent tenant={tenant} property={property} sci={sci} variant="page" />
     </FullPageShell>
   );
@@ -278,10 +325,17 @@ export function AlertDetailContent({ alert }: { alert: AlertItem }) {
   );
 }
 
-export function AlertDetailPage({ alert, backLabel, onBack }: { alert: AlertItem; backLabel: string; onBack: () => void }) {
+export function AlertDetailPage({ alert, backLabel, onBack, onDelete }: { alert: AlertItem; backLabel: string; onBack: () => void; onDelete?: () => void }) {
   const cfg = sevCfg[alert.severity];
   return (
-    <FullPageShell backLabel={backLabel} onBack={onBack} title={alert.title} subtitle={cfg.label} color={cfg.color}>
+    <FullPageShell
+      backLabel={backLabel}
+      onBack={onBack}
+      title={alert.title}
+      subtitle={cfg.label}
+      color={cfg.color}
+      headerExtra={<FullPageCrudActions onDelete={onDelete} />}
+    >
       <AlertDetailContent alert={alert} />
     </FullPageShell>
   );

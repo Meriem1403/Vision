@@ -101,7 +101,7 @@ function DrawerBody({ target, ctx, onPropertyCredit, onOpenFullPage }: {
   }
 }
 
-export function FullPageDetail({ target, view, ctx, section, onSectionChange, onBack, onOpenProperty }: {
+export function FullPageDetail({ target, view, ctx, section, onSectionChange, onBack, onOpenProperty, onEdit, onDelete }: {
   target: DetailTarget;
   view: View;
   ctx: { properties: Property[]; scis: SCI[]; tenants: Tenant[]; alerts: AlertItem[] };
@@ -109,6 +109,8 @@ export function FullPageDetail({ target, view, ctx, section, onSectionChange, on
   onSectionChange: (s: "property" | "credit") => void;
   onBack: () => void;
   onOpenProperty?: (id: string) => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const backLabel = FULL_PAGE_BACK[view];
   const { properties, scis, tenants, alerts } = ctx;
@@ -127,25 +129,27 @@ export function FullPageDetail({ target, view, ctx, section, onSectionChange, on
           onSectionChange={onSectionChange}
           onBack={onBack}
           backLabel={backLabel}
+          onEdit={onEdit}
+          onDelete={onDelete}
         />
       );
     }
     case "sci": {
       const s = scis.find((x) => x.id === target.id);
       if (!s) return null;
-      return <SciDetailPage sci={s} properties={properties} backLabel={backLabel} onBack={onBack} onSelectProperty={onOpenProperty} />;
+      return <SciDetailPage sci={s} properties={properties} backLabel={backLabel} onBack={onBack} onSelectProperty={onOpenProperty} onEdit={onEdit} onDelete={onDelete} />;
     }
     case "tenant": {
       const t = tenants.find((x) => x.id === target.id);
       if (!t) return null;
       const p = properties.find((x) => x.id === t.propertyId);
       const sci = p ? sciOf(p, scis) : (scis[0] ?? FALLBACK_SCI);
-      return <TenantDetailPage tenant={t} property={p} sci={sci} backLabel={backLabel} onBack={onBack} />;
+      return <TenantDetailPage tenant={t} property={p} sci={sci} backLabel={backLabel} onBack={onBack} onEdit={onEdit} onDelete={onDelete} />;
     }
     case "alert": {
       const a = alerts.find((x) => x.id === target.id);
       if (!a) return null;
-      return <AlertDetailPage alert={a} backLabel={backLabel} onBack={onBack} />;
+      return <AlertDetailPage alert={a} backLabel={backLabel} onBack={onBack} onDelete={onDelete} />;
     }
     case "compta": {
       const s = scis.find((x) => x.id === target.sciId);

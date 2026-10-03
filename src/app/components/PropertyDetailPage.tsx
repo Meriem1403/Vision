@@ -1,6 +1,6 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, CreditCard, Home, Pencil } from "lucide-react";
+import { ArrowLeft, CreditCard, Home, Pencil, Trash2 } from "lucide-react";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, G } from "./layout";
 import { PropertyDetailContent, CreditDetailContent, type PropertyShape, type CreditShape } from "./PropertyDetail";
 
@@ -15,6 +15,7 @@ export function PropertyDetailPage({
   onBack,
   backLabel = "Retour aux biens",
   onEdit,
+  onDelete,
 }: {
   property: PropertyShape;
   sciName: string;
@@ -24,8 +25,10 @@ export function PropertyDetailPage({
   onBack: () => void;
   backLabel?: string;
   onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const creditRef = useRef<HTMLDivElement>(null);
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const hasCredit = !!property.credit;
 
@@ -41,11 +44,29 @@ export function PropertyDetailPage({
           <ArrowLeft size={16} className="flex-shrink-0" />
           <span className="truncate">{backLabel}</span>
         </button>
-        {onEdit && (
-          <button type="button" onClick={onEdit} className={`${fullPageBtn} sm:w-auto`}>
-            <Pencil size={14} />
-            <span>Modifier</span>
-          </button>
+        {(onEdit || onDelete) && (
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {onEdit && (
+              <button type="button" onClick={onEdit} className={`${fullPageBtn} sm:w-auto`}>
+                <Pencil size={14} />
+                <span>Modifier</span>
+              </button>
+            )}
+            {onDelete && (
+              confirmDel ? (
+                <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                  <span className="text-xs vision-negative-text whitespace-nowrap">Supprimer ?</span>
+                  <button type="button" onClick={onDelete} className="min-h-[44px] px-3 rounded-xl bg-red-500/80 text-white text-xs font-bold">Oui</button>
+                  <button type="button" onClick={() => setConfirmDel(false)} className={`${fullPageBtn} sm:w-auto`}>Non</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setConfirmDel(true)} className={`${fullPageBtn} sm:w-auto vision-negative-text`}>
+                  <Trash2 size={14} />
+                  <span>Supprimer</span>
+                </button>
+              )
+            )}
+          </div>
         )}
         {hasCredit && (
           <div className={`${G} flex w-full sm:w-auto sm:min-w-[220px] p-1 gap-1 sm:ml-auto`}>

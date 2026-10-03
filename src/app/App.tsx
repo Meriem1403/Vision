@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { computeLoanSummary, enrichCredit, patchCreditField } from "@/lib/loanCalculator";
 import { api, isApiAvailable } from "@/lib/api";
+import {
+  detailPath, parseAppLocation, readSegment, viewPath, withSearch,
+  type PortfolioSegment,
+} from "@/lib/routes";
+import { PaginationBar, usePagination } from "@/app/components/Pagination";
 import {
   AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -297,6 +303,45 @@ function DelConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: 
   );
 }
 
+// ─── PORTEFEUILLE : INVESTISSEMENT vs RÉSIDENCE PRINCIPALE ───────────────────
+
+const SEGMENT_VIEWS: View[] = ["dashboard", "sci", "biens", "credits", "location", "comptabilite", "patrimoine"];
+
+function PortfolioSegmentTabs({
+  segment,
+  onChange,
+  investCount,
+  rpCount,
+}: {
+  segment: PortfolioSegment;
+  onChange: (s: PortfolioSegment) => void;
+  investCount: number;
+  rpCount: number;
+}) {
+  return (
+    <div className={`${G} flex w-full sm:w-auto p-1 gap-1 mb-4 md:mb-5`}>
+      <button
+        type="button"
+        onClick={() => onChange("investissement")}
+        className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all ${segment === "investissement" ? "vision-chip-active" : "vision-text-muted hover:vision-text"}`}
+      >
+        <TrendingUp size={14} />
+        Investissement
+        <span className="text-xs opacity-70 font-mono">{investCount}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("residence")}
+        className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all ${segment === "residence" ? "vision-chip-active" : "vision-text-muted hover:vision-text"}`}
+      >
+        <Home size={14} />
+        Résidence principale
+        <span className="text-xs opacity-70 font-mono">{rpCount}</span>
+      </button>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 
 function normPerson(name: string) {
@@ -571,8 +616,9 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [filterSci, setFilterSci] = useState("all");
   const [display, setDisplay] = useState<"grid" | "table">("grid");
-  if (mode !== "list") return <PropertyForm property={editing} scis={scis} onBack={() => { setMode("list"); setEditing(null); }} onSave={(p) => { mode === "create" ? onAdd(p) : onUpdate(p); setMode("list"); setEditing(null); }} onDelete={editing ? () => { onDelete(editing.id); setMode("list"); setEditing(null); } : undefined} />;
   const filtered = properties.filter((p) => filterSci === "all" || p.sciId === filterSci);
+  const paging = usePagination(filtered, `${filterSci}-${filtered.length}`);
+  if (mode !== "list") return <PropertyForm property={editing} scis={scis} onBack={() => { setMode("list"); setEditing(null); }} onSave={(p) => { mode === "create" ? onAdd(p) : onUpdate(p); setMode("list"); setEditing(null); }} onDelete={editing ? () => { onDelete(editing.id); setMode("list"); setEditing(null); } : undefined} />;
 
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
@@ -593,7 +639,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
       <AnimatePresence mode="wait">
         {display === "grid" ? (
           <motion.div key="grid" variants={gridV} initial="hidden" animate="show" exit={{ opacity: 0, transition: { duration: 0.15 } }} className={cardsGrid}>
-            {filtered.map((p) => {
+            {paging.pageItems.map((p) => {
               const sci = sciOf(p, scis);
               const cf = cashFlow(p);
               const pv = p.valeurActuelle - p.prixAchat - p.travaux - p.fraisNotaire;
@@ -634,7 +680,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
               <table className="w-full">
                 <thead><tr className="border-b border-[var(--v-border-subtle)]">{["Adresse", "Entité", "Type", "Loyer/mois", "Cash-flow", "Plus-value", "Crédit restant", "Actions"].map((h) => <th key={h} className="text-left px-4 py-3 vision-table-head whitespace-nowrap">{h}</th>)}</tr></thead>
                 <tbody>
-                  {filtered.map((p, i) => {
+                  {paging.pageItems.map((p, i) => {
                     const sci = sciOf(p, scis);
                     const cf = cashFlow(p);
                     const pv = p.valeurActuelle - p.prixAchat - p.travaux - p.fraisNotaire;
@@ -668,6 +714,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
           </motion.div>
         )}
       </AnimatePresence>
+      <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
   );
 }
@@ -708,12 +755,13 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<SCI | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const paging = usePagination(scis, scis.length);
   if (mode !== "list") return <SCIForm sci={editing} onBack={() => { setMode("list"); setEditing(null); }} onSave={(s) => { mode === "create" ? onAdd(s) : onUpdate(s); setMode("list"); setEditing(null); }} onDelete={editing ? () => { onDelete(editing.id); setMode("list"); setEditing(null); } : undefined} />;
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <div className="flex justify-end"><button onClick={() => { setEditing(null); setMode("create"); }} className={btnP}><Plus size={14} />Nouvelle SCI</button></div>
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2 gap-4 md:gap-5 w-full">
-        {scis.map((sci) => {
+        {paging.pageItems.map((sci) => {
           const props = properties.filter((p) => p.sciId === sci.id);
           const cf = props.reduce((s, p) => s + cashFlow(p), 0);
           return (
@@ -748,6 +796,7 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
           );
         })}
       </motion.div>
+      <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
   );
 }
@@ -810,6 +859,7 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
     setEditing(null);
   };
   const del = (c: CreditEntry) => { const prop = properties.find((p) => p.id === c.propertyId)!; onUpdateProperty({ ...prop, credit: undefined }); setConfirmDel(null); };
+  const paging = usePagination(allCredits, allCredits.length);
   if (mode !== "list") return <CreditFormView credit={editing} properties={properties} onBack={() => { setMode("list"); setEditing(null); }} onSave={save} onDelete={editing ? () => { del(editing); setMode("list"); setEditing(null); } : undefined} />;
 
   return (
@@ -823,7 +873,7 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
         <button onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto`}><Plus size={14} /><span className="hidden sm:inline">Nouveau crédit</span></button>
       </div>
       <motion.div variants={gridV} initial="hidden" animate="show" className={cardsGrid}>
-        {allCredits.map((c) => {
+        {paging.pageItems.map((c) => {
           const prop = properties.find((p) => p.id === c.propertyId)!;
           const sci = sciOf(prop, scis);
           const pct = Math.round(((c.montantInitial - c.capitalRestant) / c.montantInitial) * 100);
@@ -852,6 +902,7 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
           );
         })}
       </motion.div>
+      <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
   );
 }
@@ -890,6 +941,7 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const paging = usePagination(tenants, tenants.length);
   if (mode !== "list") return <TenantForm tenant={editing} properties={properties} scis={scis} onBack={() => { setMode("list"); setEditing(null); }} onSave={(t) => { mode === "create" ? onAdd(t) : onUpdate(t); setMode("list"); setEditing(null); }} onDelete={editing ? () => { onDelete(editing.id); setMode("list"); setEditing(null); } : undefined} />;
   const statStyle: Record<Tenant["statut"], { bg: string; color: string }> = { "En cours": { bg: "rgba(52,211,153,0.13)", color: "#34d399" }, "Impayé": { bg: "rgba(248,113,113,0.13)", color: "#f87171" }, "Terminé": { bg: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" } };
   return (
@@ -899,7 +951,7 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
         <button onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto`}><Plus size={14} /><span className="hidden sm:inline">Nouveau locataire</span></button>
       </div>
       <motion.div variants={gridV} initial="hidden" animate="show" className={cardsGrid}>
-        {tenants.map((t) => {
+        {paging.pageItems.map((t) => {
           const prop = properties.find((p) => p.id === t.propertyId)!;
           const sci = prop ? sciOf(prop, scis) : (scis[0] ?? FALLBACK_SCI);
           const pct = leasePct(t);
@@ -934,6 +986,7 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
           );
         })}
       </motion.div>
+      <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
   );
 }
@@ -943,6 +996,7 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
 function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onSelectSci: (id: string) => void; onOpenFullPage: (id: string) => void }) {
   const grandCF = properties.reduce((s, p) => s + cashFlow(p), 0);
   const barData = scis.map((sci) => { const props = properties.filter((p) => p.sciId === sci.id); return { name: sci.shortName, revenus: props.reduce((s, p) => s + p.loyer, 0), charges: props.reduce((s, p) => s + (p.credit?.mensualite ?? 0) + p.taxeFonciere / 12 + p.assurance / 12, 0), fill: sci.color }; });
+  const paging = usePagination(scis, scis.length);
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <motion.div variants={itemV} initial="hidden" animate="show" className={`${GE} p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4`} style={{ borderColor: grandCF >= 0 ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)" }}>
@@ -963,7 +1017,7 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
         </ResponsiveContainer>
       </motion.div>
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2 gap-4 md:gap-5 w-full">
-        {scis.map((sci) => {
+        {paging.pageItems.map((sci) => {
           const props = properties.filter((p) => p.sciId === sci.id);
           const loyers = props.reduce((s, p) => s + p.loyer, 0);
           const credits = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0), 0);
@@ -990,6 +1044,7 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
           );
         })}
       </motion.div>
+      <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
   );
 }
@@ -998,6 +1053,7 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
 
 function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onSelectProperty: (id: string) => void; onOpenFullPage: (id: string) => void }) {
   const items = properties.map((p) => { const cr = p.prixAchat + p.travaux + p.fraisNotaire; const pv = p.valeurActuelle - cr; return { p, cr, pv, pct: (pv / cr) * 100, sci: sciOf(p, scis) }; }).sort((a, b) => b.pv - a.pv);
+  const paging = usePagination(items, items.length);
   const totalPV = items.reduce((s, x) => s + x.pv, 0);
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
@@ -1032,7 +1088,7 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
           <table className="w-full">
             <thead><tr className="border-b border-[var(--v-border-subtle)]">{["Bien", "Entité", "Coût de revient", "Valeur actuelle", "Plus-value", "Gain %"].map((h) => <th key={h} className="text-left px-5 py-3 vision-table-head whitespace-nowrap">{h}</th>)}</tr></thead>
             <tbody>
-              {items.map(({ p, cr, pv, pct, sci }, i) => (
+              {paging.pageItems.map(({ p, cr, pv, pct, sci }, i) => (
                 <motion.tr key={p.id} variants={rowV} initial="hidden" animate="show" transition={{ delay: i * 0.04 }} onClick={() => onSelectProperty(p.id)} className="border-b border-[var(--v-border-subtle)] hover:vision-surface transition-colors cursor-pointer group">
                   <td className="px-5 py-3.5"><p className="text-sm vision-text font-medium">{p.address}</p><p className="text-xs vision-text-muted">{p.ville} · {p.type}</p></td>
                   <td className="px-5 py-3.5"><SCIChip sci={sci} /></td>
@@ -1051,7 +1107,7 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
           </table>
         </div>
         <div className="md:hidden p-4 space-y-2">
-          {items.map(({ p, pv, pct, sci }) => (
+          {paging.pageItems.map(({ p, pv, pct, sci }) => (
             <button key={p.id} type="button" onClick={() => onSelectProperty(p.id)} className="w-full flex items-center justify-between py-3 border-b border-[var(--v-border-subtle)] last:border-0 text-left hover:vision-surface px-1 rounded-lg transition-colors">
               <div className="min-w-0 mr-3"><p className="text-xs font-medium vision-text truncate">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p><div className="mt-1"><SCIChip sci={sci} /></div></div>
               <div className="text-right flex-shrink-0"><p className="text-sm font-bold font-mono" style={{ color: pv >= 0 ? "#34d399" : "#f87171" }}>{pv >= 0 ? "+" : ""}{fmt(pv)}</p><p className="text-xs font-mono" style={{ color: pct >= 0 ? "#34d399" : "#f87171" }}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</p></div>
@@ -1059,6 +1115,7 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
           ))}
         </div>
       </motion.div>
+      <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
   );
 }
@@ -1073,6 +1130,7 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
     low: { color: "rgba(255,255,255,0.38)", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.09)", label: "Info", dot: "rgba(255,255,255,0.28)" },
   };
   const sorted = [...alerts].sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]));
+  const paging = usePagination(sorted, sorted.length);
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-3 gap-4">
@@ -1084,7 +1142,7 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
       <div className="relative min-w-0">
         <div className="absolute left-3 sm:left-5 top-2 bottom-2 w-px hidden sm:block" style={{ background: "linear-gradient(to bottom, rgba(255,255,255,0.12), rgba(255,255,255,0.03))" }} />
         <div className="space-y-3 pl-0 sm:pl-12">
-          {sorted.map((a, i) => {
+          {paging.pageItems.map((a, i) => {
             const cfg = sevCfg[a.severity]; const Icon = iconMap[a.type];
             return (
               <motion.div key={a.id} variants={rowV} initial="hidden" animate="show" transition={{ delay: i * 0.06 }} whileHover={{ x: 3 }} onClick={() => onSelectAlert(a.id)}
@@ -1107,6 +1165,7 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
           {alerts.length === 0 && <div className="text-center py-14"><p className="vision-text-muted text-sm">Aucune alerte active</p></div>}
         </div>
       </div>
+      <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
   );
 }
@@ -1126,12 +1185,51 @@ const ALL_NAV: { id: View; label: string; Icon: typeof LayoutDashboard }[] = [
   { id: "alertes", label: "Alertes", Icon: Bell },
 ];
 
+const APP_ROUTES = [
+  "/",
+  "/login",
+  "/dashboard",
+  "/sci",
+  "/sci/:id",
+  "/sci/:id/edit",
+  "/biens",
+  "/biens/:id",
+  "/biens/:id/edit",
+  "/biens/:id/credit",
+  "/biens/:id/credit/edit",
+  "/credits",
+  "/credits/:id",
+  "/credits/:id/edit",
+  "/location",
+  "/location/:id",
+  "/location/:id/edit",
+  "/comptabilite",
+  "/comptabilite/:sciId",
+  "/patrimoine",
+  "/dossiers",
+  "/portail-banque",
+  "/alertes",
+  "/alertes/:id",
+] as const;
+
 export default function App() {
+  return (
+    <Routes>
+      {APP_ROUTES.map((path) => (
+        <Route key={path} path={path} element={<VisionShell />} />
+      ))}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
+}
+
+function VisionShell() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const useSupabase = isSupabaseConfigured();
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredUser());
   const [authChecked, setAuthChecked] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
-  const [view, setView] = useState<View>("dashboard");
   const [properties, setProperties] = useState<Property[]>(() => (useSupabase ? [] : PROPS_INIT));
   const [scis, setScis] = useState<SCI[]>(() => (useSupabase ? [] : SCIS_INIT));
   const [tenants, setTenants] = useState<Tenant[]>(() => (useSupabase ? [] : TENANTS_INIT));
@@ -1143,8 +1241,21 @@ export default function App() {
   const [customColors, setCustomColors] = useState<CustomThemeColors>(() => loadCustomColors());
   const [apiOnline, setApiOnline] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState<DetailTarget | null>(null);
-  const [fullPageTarget, setFullPageTarget] = useState<DetailTarget | null>(null);
-  const [propertySection, setPropertySection] = useState<"property" | "credit">("property");
+
+  const parsed = useMemo(() => parseAppLocation(location.pathname), [location.pathname]);
+  const portfolioSegment = readSegment(location.search);
+  const view: View = parsed?.view ?? (authUser ? defaultViewForRole(authUser.role) : "dashboard");
+  const fullPageTarget = parsed?.detail ?? null;
+  const fullPageEditing = !!parsed?.editing;
+  const propertySection = fullPageTarget?.kind === "property" ? (fullPageTarget.section ?? "property") : "property";
+
+  const go = (path: string, opts?: { replace?: boolean }) => {
+    navigate(withSearch(path, { segment: portfolioSegment }), opts);
+  };
+
+  const setPortfolioSegment = (segment: PortfolioSegment) => {
+    navigate(withSearch(location.pathname, { segment }), { replace: true });
+  };
 
   const navItems = useMemo(
     () => (authUser ? ALL_NAV.filter((n) => canAccessView(authUser, n.id)) : []),
@@ -1165,23 +1276,33 @@ export default function App() {
     return tenants.filter((t) => propIds.has(t.propertyId));
   }, [authUser, tenants, visibleProperties]);
 
+  /** Investissement (IR/IS) vs Résidence principale (RP) — évite de fausser les KPI locatifs */
+  const segmentScis = useMemo(
+    () => visibleScis.filter((s) => (portfolioSegment === "residence" ? s.type === "RP" : s.type !== "RP")),
+    [visibleScis, portfolioSegment],
+  );
+  const segmentProperties = useMemo(() => {
+    const ids = new Set(segmentScis.map((s) => s.id));
+    return visibleProperties.filter((p) => ids.has(p.sciId));
+  }, [visibleProperties, segmentScis]);
+  const segmentTenants = useMemo(() => {
+    const ids = new Set(segmentProperties.map((p) => p.id));
+    return visibleTenants.filter((t) => ids.has(t.propertyId));
+  }, [visibleTenants, segmentProperties]);
+
   const detailCtx = { properties: visibleProperties, scis: visibleScis, tenants: visibleTenants, alerts };
-  const openDrawer = (target: DetailTarget) => {
-    setDrawerTarget(target);
-    if (target.kind === "property") setPropertySection(target.section ?? "property");
-  };
+  const openDrawer = (target: DetailTarget) => setDrawerTarget(target);
   const closeDrawer = () => setDrawerTarget(null);
-  const openFullPage = (target: DetailTarget) => {
+  const openFullPage = (target: DetailTarget, editing = false) => {
     setDrawerTarget(null);
-    setFullPageTarget(target);
-    if (target.kind === "property") setPropertySection(target.section ?? "property");
+    go(detailPath(target, { editing, fromView: view }));
   };
-  const closeFullPage = () => { setFullPageTarget(null); setPropertySection("property"); };
+  const closeFullPage = () => go(viewPath(view));
   const openPropertyDrawer = (id: string, credit = false) => openDrawer({ kind: "property", id, section: credit ? "credit" : "property" });
   const openPropertyFullPage = (id: string, section: "property" | "credit" = "property") => openFullPage({ kind: "property", id, section });
   const handlePropertySectionChange = (s: "property" | "credit") => {
-    setPropertySection(s);
-    setFullPageTarget((t) => (t?.kind === "property" ? { ...t, section: s } : t));
+    if (fullPageTarget?.kind !== "property") return;
+    go(detailPath({ kind: "property", id: fullPageTarget.id, section: s }, { editing: fullPageEditing, fromView: view }));
   };
 
   const handleThemeChange = (id: string) => {
@@ -1241,7 +1362,6 @@ export default function App() {
           if (user) {
             storeUser(user);
             setAuthUser(user);
-            setView((v) => (canAccessView(user, v) ? v : defaultViewForRole(user.role)));
           } else {
             clearSession();
             setAuthUser(null);
@@ -1256,7 +1376,6 @@ export default function App() {
           if (cancelled) return;
           storeUser(user);
           setAuthUser(user);
-          setView((v) => (canAccessView(user, v) ? v : defaultViewForRole(user.role)));
         }
       } catch {
         if (!cancelled) {
@@ -1352,15 +1471,24 @@ export default function App() {
 
   const handleLogin = (user: AuthUser) => {
     setAuthUser(user);
-    setView(defaultViewForRole(user.role));
-    closeFullPage();
     closeDrawer();
+    navigate(withSearch(viewPath(defaultViewForRole(user.role))), { replace: true });
   };
 
   useEffect(() => {
-    if (!authUser) return;
-    setView((v) => (canAccessView(authUser, v) ? v : defaultViewForRole(authUser.role)));
-  }, [authUser]);
+    if (!authChecked) return;
+    if (!authUser || passwordRecovery) {
+      if (location.pathname !== "/login") navigate("/login", { replace: true });
+      return;
+    }
+    if (location.pathname === "/" || location.pathname === "/login") {
+      navigate(withSearch(viewPath(defaultViewForRole(authUser.role)), { segment: portfolioSegment }), { replace: true });
+      return;
+    }
+    if (!parsed || !canAccessView(authUser, parsed.view)) {
+      navigate(withSearch(viewPath(defaultViewForRole(authUser.role)), { segment: portfolioSegment }), { replace: true });
+    }
+  }, [authChecked, authUser, passwordRecovery, location.pathname, parsed, portfolioSegment, navigate]);
 
   const handleLogout = async () => {
     if (useSupabase) await supabaseLogout().catch(() => {});
@@ -1373,9 +1501,8 @@ export default function App() {
       setTenants([]);
       setAlerts([]);
     }
-    setView("dashboard");
-    closeFullPage();
     closeDrawer();
+    navigate("/login", { replace: true });
   };
 
   const addProp = (p: Property) => {
@@ -1435,7 +1562,11 @@ export default function App() {
   const delAlert = (id: string) => setAlerts((as) => as.filter((x) => x.id !== id));
 
   const highAlerts = alerts.filter((a) => a.severity === "high").length;
-  const handleNav = (v: View) => { setView(v); setSidebarOpen(false); closeFullPage(); closeDrawer(); };
+  const handleNav = (v: View) => {
+    setSidebarOpen(false);
+    closeDrawer();
+    go(viewPath(v));
+  };
 
   const bankLoans = useMemo(
     () =>
@@ -1561,8 +1692,82 @@ export default function App() {
 
         <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full min-w-0 p-3 sm:p-5 md:p-6 lg:p-8 scroll-pb-4">
           <AnimatePresence mode="wait">
-            <motion.div key={fullPageTarget ? `fp-${fullPageTarget.kind}-${"id" in fullPageTarget ? fullPageTarget.id : fullPageTarget.sciId}` : view} variants={pageV} initial="hidden" animate="show" exit="exit" className={`${pageWrap} mx-auto pb-2`}>
-              {fullPageTarget ? (
+            <motion.div key={fullPageTarget ? `fp-${fullPageTarget.kind}-${"id" in fullPageTarget ? fullPageTarget.id : fullPageTarget.sciId}${fullPageEditing ? "-edit" : ""}` : `${view}-${portfolioSegment}`} variants={pageV} initial="hidden" animate="show" exit="exit" className={`${pageWrap} mx-auto pb-2`}>
+              {fullPageTarget && fullPageEditing && canManageData(authUser) ? (
+                (() => {
+                  const exitEdit = () => fullPageTarget && openFullPage(fullPageTarget, false);
+                  const afterDelete = () => closeFullPage();
+                  if (fullPageTarget.kind === "property") {
+                    const p = visibleProperties.find((x) => x.id === fullPageTarget.id);
+                    if (!p) return null;
+                    if (propertySection === "credit" && p.credit) {
+                      const entry: CreditEntry = { ...p.credit, id: `c_${p.id}`, propertyId: p.id };
+                      return (
+                        <CreditFormView
+                          credit={entry}
+                          properties={visibleProperties}
+                          onBack={exitEdit}
+                          onSave={(c) => {
+                            const computed = enrichCredit(c);
+                            updProp({
+                              ...p,
+                              credit: {
+                                banque: computed.banque,
+                                montantInitial: computed.montantInitial,
+                                taux: computed.taux,
+                                duree: computed.duree,
+                                debut: computed.debut,
+                                assuranceMensuelle: computed.assuranceMensuelle,
+                                mensualite: computed.mensualite,
+                                capitalRestant: computed.capitalRestant,
+                                finCredit: computed.finCredit ?? null,
+                              },
+                            });
+                            exitEdit();
+                          }}
+                          onDelete={() => { updProp({ ...p, credit: undefined }); afterDelete(); }}
+                        />
+                      );
+                    }
+                    return (
+                      <PropertyForm
+                        property={p}
+                        scis={visibleScis}
+                        onBack={exitEdit}
+                        onSave={(next) => { updProp(next); exitEdit(); }}
+                        onDelete={() => { delProp(p.id); afterDelete(); }}
+                      />
+                    );
+                  }
+                  if (fullPageTarget.kind === "sci") {
+                    const s = visibleScis.find((x) => x.id === fullPageTarget.id);
+                    if (!s) return null;
+                    return (
+                      <SCIForm
+                        sci={s}
+                        onBack={exitEdit}
+                        onSave={(next) => { updSCI(next); exitEdit(); }}
+                        onDelete={() => { delSCI(s.id); afterDelete(); }}
+                      />
+                    );
+                  }
+                  if (fullPageTarget.kind === "tenant") {
+                    const t = visibleTenants.find((x) => x.id === fullPageTarget.id);
+                    if (!t) return null;
+                    return (
+                      <TenantForm
+                        tenant={t}
+                        properties={visibleProperties}
+                        scis={visibleScis}
+                        onBack={exitEdit}
+                        onSave={(next) => { updTenant(next); exitEdit(); }}
+                        onDelete={() => { delTenant(t.id); afterDelete(); }}
+                      />
+                    );
+                  }
+                  return null;
+                })()
+              ) : fullPageTarget ? (
                 <FullPageDetail
                   target={fullPageTarget}
                   view={view}
@@ -1571,16 +1776,44 @@ export default function App() {
                   onSectionChange={handlePropertySectionChange}
                   onBack={closeFullPage}
                   onOpenProperty={(id) => openPropertyFullPage(id)}
+                  onEdit={canManageData(authUser) && fullPageTarget.kind !== "compta" && fullPageTarget.kind !== "alert"
+                    ? () => openFullPage(fullPageTarget, true)
+                    : undefined}
+                  onDelete={canManageData(authUser) ? (() => {
+                    if (fullPageTarget.kind === "property") {
+                      return () => {
+                        if (propertySection === "credit") {
+                          const p = visibleProperties.find((x) => x.id === fullPageTarget.id);
+                          if (p) updProp({ ...p, credit: undefined });
+                        } else {
+                          delProp(fullPageTarget.id);
+                        }
+                        closeFullPage();
+                      };
+                    }
+                    if (fullPageTarget.kind === "sci") return () => { delSCI(fullPageTarget.id); closeFullPage(); };
+                    if (fullPageTarget.kind === "tenant") return () => { delTenant(fullPageTarget.id); closeFullPage(); };
+                    if (fullPageTarget.kind === "alert") return () => { delAlert(fullPageTarget.id); closeFullPage(); };
+                    return undefined;
+                  })() : undefined}
                 />
               ) : (
                 <>
-              {view === "dashboard" && <DashboardView properties={visibleProperties} scis={visibleScis} user={authUser} onSelectProperty={(id) => openPropertyDrawer(id)} />}
-              {view === "sci" && <SCIView scis={visibleScis} properties={visibleProperties} onAdd={canManageData(authUser) ? addSCI : () => {}} onUpdate={canManageData(authUser) ? updSCI : () => {}} onDelete={canManageData(authUser) ? delSCI : () => {}} onSelectSci={(id) => openDrawer({ kind: "sci", id })} onOpenFullPage={(id) => openFullPage({ kind: "sci", id })} />}
-              {view === "biens" && <BiensView properties={visibleProperties} scis={visibleScis} onAdd={canManageData(authUser) ? addProp : () => {}} onUpdate={canManageData(authUser) ? updProp : () => {}} onDelete={canManageData(authUser) ? delProp : () => {}} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
-              {view === "credits" && <CreditsView properties={visibleProperties} scis={visibleScis} onUpdateProperty={canManageData(authUser) ? updProp : () => {}} onSelectCredit={(id) => openPropertyDrawer(id, true)} onOpenFullPage={(id) => openPropertyFullPage(id, "credit")} />}
-              {view === "location" && canAccessView(authUser, "location") && <LocationView tenants={visibleTenants} properties={visibleProperties} scis={visibleScis} onAdd={canManageData(authUser) ? addTenant : () => {}} onUpdate={canManageData(authUser) ? updTenant : () => {}} onDelete={canManageData(authUser) ? delTenant : () => {}} onSelectTenant={(id) => openDrawer({ kind: "tenant", id })} onOpenFullPage={(id) => openFullPage({ kind: "tenant", id })} />}
-              {view === "comptabilite" && canAccessView(authUser, "comptabilite") && <ComptabiliteView properties={visibleProperties} scis={visibleScis} onSelectSci={(id) => openDrawer({ kind: "compta", sciId: id })} onOpenFullPage={(id) => openFullPage({ kind: "compta", sciId: id })} />}
-              {view === "patrimoine" && <PatrimoineView properties={visibleProperties} scis={visibleScis} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
+              {SEGMENT_VIEWS.includes(view) && (
+                <PortfolioSegmentTabs
+                  segment={portfolioSegment}
+                  onChange={setPortfolioSegment}
+                  investCount={visibleScis.filter((s) => s.type !== "RP").length}
+                  rpCount={visibleScis.filter((s) => s.type === "RP").length}
+                />
+              )}
+              {view === "dashboard" && <DashboardView properties={segmentProperties} scis={segmentScis} user={authUser} onSelectProperty={(id) => openPropertyDrawer(id)} />}
+              {view === "sci" && <SCIView scis={segmentScis} properties={segmentProperties} onAdd={canManageData(authUser) ? addSCI : () => {}} onUpdate={canManageData(authUser) ? updSCI : () => {}} onDelete={canManageData(authUser) ? delSCI : () => {}} onSelectSci={(id) => openDrawer({ kind: "sci", id })} onOpenFullPage={(id) => openFullPage({ kind: "sci", id })} />}
+              {view === "biens" && <BiensView properties={segmentProperties} scis={segmentScis} onAdd={canManageData(authUser) ? addProp : () => {}} onUpdate={canManageData(authUser) ? updProp : () => {}} onDelete={canManageData(authUser) ? delProp : () => {}} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
+              {view === "credits" && <CreditsView properties={segmentProperties} scis={segmentScis} onUpdateProperty={canManageData(authUser) ? updProp : () => {}} onSelectCredit={(id) => openPropertyDrawer(id, true)} onOpenFullPage={(id) => openPropertyFullPage(id, "credit")} />}
+              {view === "location" && canAccessView(authUser, "location") && <LocationView tenants={segmentTenants} properties={segmentProperties} scis={segmentScis} onAdd={canManageData(authUser) ? addTenant : () => {}} onUpdate={canManageData(authUser) ? updTenant : () => {}} onDelete={canManageData(authUser) ? delTenant : () => {}} onSelectTenant={(id) => openDrawer({ kind: "tenant", id })} onOpenFullPage={(id) => openFullPage({ kind: "tenant", id })} />}
+              {view === "comptabilite" && canAccessView(authUser, "comptabilite") && <ComptabiliteView properties={segmentProperties} scis={segmentScis} onSelectSci={(id) => openDrawer({ kind: "compta", sciId: id })} onOpenFullPage={(id) => openFullPage({ kind: "compta", sciId: id })} />}
+              {view === "patrimoine" && <PatrimoineView properties={segmentProperties} scis={segmentScis} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
               {view === "dossiers" && canAccessView(authUser, "dossiers") && (
                 <BankDossierView
                   user={authUser}
