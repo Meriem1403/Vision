@@ -102,7 +102,7 @@
   color-scheme: dark;
 }
 
-/* Thèmes clairs : contrôles natifs (calendrier, flèches) en mode light */
+/* Thèmes clairs : contrôles natifs (calendrier, flèches) lisibles */
 :root[data-vision-theme="aube"] .vision-input,
 :root[data-vision-theme="aube"] .vision-select,
 :root[data-vision-light="true"] .vision-input,
@@ -110,32 +110,23 @@
   color-scheme: light;
 }
 
-/* Number : masquer les flèches natives (souvent illisibles / hors thème) */
+/* Number : garder les flèches, couleur adaptée via color-scheme */
 .vision-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-.vision-input[type="number"]::-webkit-inner-spin-button,
-.vision-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-  display: none;
+  appearance: auto;
 }
 
-/* Date : icône calendrier native teintée pour fond sombre */
-.vision-input[type="date"],
-.vision-input[type="datetime-local"],
-.vision-input[type="month"],
-.vision-input[type="time"] {
-  position: relative;
-}
+/* Date : icône calendrier native teintée (taille normale, pas d’overlay) */
 .vision-input[type="date"]::-webkit-calendar-picker-indicator,
 .vision-input[type="datetime-local"]::-webkit-calendar-picker-indicator,
 .vision-input[type="month"]::-webkit-calendar-picker-indicator,
 .vision-input[type="time"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
-  opacity: 0.9;
-  filter: invert(1) brightness(1.35) contrast(0.9);
+  opacity: 0.85;
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  margin-left: 0.25rem;
+  filter: invert(1) brightness(1.4);
 }
 
 :root[data-vision-theme="aube"] .vision-input[type="date"]::-webkit-calendar-picker-indicator,
@@ -147,20 +138,7 @@
 :root[data-vision-light="true"] .vision-input[type="month"]::-webkit-calendar-picker-indicator,
 :root[data-vision-light="true"] .vision-input[type="time"]::-webkit-calendar-picker-indicator {
   filter: none;
-  opacity: 0.7;
-}
-
-/* Variante avec icône Lucide custom : on cache l’indicateur natif */
-.vision-input-date-custom::-webkit-calendar-picker-indicator {
-  opacity: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  left: 0;
-  top: 0;
-  cursor: pointer;
-  filter: none !important;
+  opacity: 0.65;
 }
 
 .vision-nav-active {
