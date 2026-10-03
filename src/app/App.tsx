@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { computeLoanSummary, enrichCredit } from "@/lib/loanCalculator";
+import { computeLoanSummary, enrichCredit, patchCreditField } from "@/lib/loanCalculator";
 import { api, isApiAvailable } from "@/lib/api";
 import {
   AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar,
@@ -414,9 +414,9 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
   const isEdit = !!property;
   const [f, setF] = useState<Property>(property ?? { id: uid(), sciId: scis[0]?.id ?? "", address: "", ville: "", cp: "", type: "T2", surface: 0, lots: 1, prixAchat: 0, travaux: 0, fraisNotaire: 0, valeurActuelle: 0, loyer: 0, taxeFonciere: 0, assurance: 0 });
   const [hasCredit, setHasCredit] = useState(!!property?.credit);
-  const [cred, setCred] = useState<Credit>(property?.credit ?? { banque: "", montantInitial: 0, taux: 0, duree: 240, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0 });
+  const [cred, setCred] = useState<Credit>(property?.credit ?? { banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
   const upd = (k: keyof Property, v: string | number) => setF((p) => ({ ...p, [k]: v }));
-  const updC = (k: keyof Credit, v: string | number) => setCred((c) => enrichCredit({ ...c, [k]: v }));
+  const updC = (k: keyof Credit, v: string | number) => setCred((c) => patchCreditField(c, k, v));
   const enrichedCred = useMemo(() => enrichCredit(cred), [cred]);
   const sci = scis.find((s) => s.id === f.sciId);
   return (
@@ -464,14 +464,15 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
         <AnimatePresence>
           {hasCredit && (
             <motion.div variants={slideV} initial="hidden" animate="show" exit="exit" className="overflow-hidden">
-              <p className="text-xs vision-text-muted mb-3">Saisissez le minimum — mensualité, capital restant et intérêts sont calculés automatiquement.</p>
+              <p className="text-xs vision-text-muted mb-3">Montant, taux, date de début et date de fin — la durée et les mensualités se calculent automatiquement.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <GI label="Banque" value={cred.banque} onChange={(e) => updC("banque", e.target.value)} className="sm:col-span-2" />
                 <GI label="Montant emprunté (€)" type="number" value={cred.montantInitial || ""} onChange={(e) => updC("montantInitial", +e.target.value)} />
                 <GI label="Taux annuel (%)" type="number" step="0.01" value={cred.taux || ""} onChange={(e) => updC("taux", +e.target.value)} />
-                <GI label="Durée (mois)" type="number" value={cred.duree || ""} onChange={(e) => updC("duree", +e.target.value)} />
                 <GI label="Date de début" type="date" value={cred.debut} onChange={(e) => updC("debut", e.target.value)} />
-                <GI label="Assurance mensuelle (€)" type="number" step="0.01" value={cred.assuranceMensuelle || ""} onChange={(e) => updC("assuranceMensuelle", +e.target.value)} className="sm:col-span-2" />
+                <GI label="Date de fin" type="date" value={cred.finCredit ?? ""} onChange={(e) => updC("finCredit", e.target.value)} />
+                <GI label="Durée (mois)" type="number" value={cred.duree || ""} onChange={(e) => updC("duree", +e.target.value)} />
+                <GI label="Assurance mensuelle (€)" type="number" step="0.01" value={cred.assuranceMensuelle || ""} onChange={(e) => updC("assuranceMensuelle", +e.target.value)} />
               </div>
               <LoanCalcSummary credit={cred} />
             </motion.div>
@@ -678,8 +679,8 @@ type CreditEntry = Credit & { id: string; propertyId: string };
 
 function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { credit: CreditEntry | null; properties: Property[]; onSave: (c: CreditEntry) => void; onBack: () => void; onDelete?: () => void }) {
   const isEdit = !!credit;
-  const [f, setF] = useState<CreditEntry>(credit ?? { id: uid(), propertyId: properties[0]?.id ?? "", banque: "", montantInitial: 0, taux: 0, duree: 240, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0 });
-  const upd = (k: string, v: string | number) => setF((c) => enrichCredit({ ...c, [k]: v }) as CreditEntry);
+  const [f, setF] = useState<CreditEntry>(credit ?? { id: uid(), propertyId: properties[0]?.id ?? "", banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
+  const upd = (k: string, v: string | number) => setF((c) => patchCreditField(c, k, v));
   const enriched = useMemo(() => enrichCredit(f) as CreditEntry, [f]);
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
@@ -687,14 +688,15 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
       <GSec title="Bien associé"><GS label="Bien" value={f.propertyId} onChange={(e) => upd("propertyId", e.target.value)} options={properties.map((p) => ({ value: p.id, label: `${p.address}, ${p.ville}` }))} /></GSec>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5 w-full">
       <GSec title="Prêt bancaire — saisie minimale">
-        <p className="text-xs vision-text-muted mb-4">Comme un outil bancaire : renseignez montant, taux et durée. Le reste est calculé automatiquement.</p>
+        <p className="text-xs vision-text-muted mb-4">Renseignez montant, taux, date de début et date de fin. La durée et les mensualités se calculent automatiquement.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
-          <GI label="Banque" value={f.banque} onChange={(e) => upd("banque", e.target.value)} className="sm:col-span-2" />
+          <GI label="Banque" value={f.banque} onChange={(e) => upd("banque", e.target.value)} className="sm:col-span-2 xl:col-span-3" />
           <GI label="Montant emprunté (€)" type="number" value={f.montantInitial || ""} onChange={(e) => upd("montantInitial", +e.target.value)} />
           <GI label="Taux annuel (%)" type="number" step="0.01" value={f.taux || ""} onChange={(e) => upd("taux", +e.target.value)} />
-          <GI label="Durée (mois)" type="number" value={f.duree || ""} onChange={(e) => upd("duree", +e.target.value)} />
           <GI label="Date de début" type="date" value={f.debut} onChange={(e) => upd("debut", e.target.value)} />
-          <GI label="Assurance mensuelle (€)" type="number" step="0.01" value={f.assuranceMensuelle || ""} onChange={(e) => upd("assuranceMensuelle", +e.target.value)} className="sm:col-span-2" />
+          <GI label="Date de fin" type="date" value={f.finCredit ?? ""} onChange={(e) => upd("finCredit", e.target.value)} />
+          <GI label="Durée (mois)" type="number" value={f.duree || ""} onChange={(e) => upd("duree", +e.target.value)} />
+          <GI label="Assurance mensuelle (€)" type="number" step="0.01" value={f.assuranceMensuelle || ""} onChange={(e) => upd("assuranceMensuelle", +e.target.value)} />
         </div>
         <LoanCalcSummary credit={f} />
       </GSec>
@@ -722,6 +724,7 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
         assuranceMensuelle: computed.assuranceMensuelle,
         mensualite: computed.mensualite,
         capitalRestant: computed.capitalRestant,
+        finCredit: computed.finCredit ?? null,
       },
     });
     setMode("list");
