@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { toast, Toaster } from "sonner";
 import { computeLoanSummary, enrichCredit, patchCreditField } from "@/lib/loanCalculator";
+import { computePortfolioYield, formatYieldPct } from "@/lib/propertyYield";
 import { api, isApiAvailable } from "@/lib/api";
 import {
   detailPath, parseAppLocation, readSegment, viewPath, withSearch,
@@ -406,7 +407,9 @@ function DashboardView({
   const totalBrut = scis.reduce((s, x) => s + x.valeurEstimee, 0);
   const totalDette = properties.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
   const loyers = properties.reduce((s, p) => s + p.loyer * 12, 0);
+  const chargesAnnuelles = properties.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
   const cf = properties.reduce((s, p) => s + cashFlow(p), 0);
+  const yieldPct = computePortfolioYield({ loyersAnnuels: loyers, chargesAnnuelles, patrimoineBrut: totalBrut });
 
   const personal = shareName
     ? scis.reduce(
@@ -417,15 +420,25 @@ function DashboardView({
           const mens = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0), 0);
           const cash = props.reduce((s, p) => s + cashFlow(p), 0);
           const loy = props.reduce((s, p) => s + p.loyer * 12, 0);
+          const charges = props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
           acc.brut += sci.valeurEstimee * ratio;
           acc.dette += dette * ratio;
           acc.mensualites += mens * ratio;
           acc.cash += cash * ratio;
           acc.loyers += loy * ratio;
+          acc.charges += charges * ratio;
           return acc;
         },
-        { brut: 0, dette: 0, mensualites: 0, cash: 0, loyers: 0 },
+        { brut: 0, dette: 0, mensualites: 0, cash: 0, loyers: 0, charges: 0 },
       )
+    : null;
+
+  const personalYield = personal
+    ? computePortfolioYield({
+        loyersAnnuels: personal.loyers,
+        chargesAnnuelles: personal.charges,
+        patrimoineBrut: personal.brut,
+      })
     : null;
 
   const kpis = [
@@ -434,7 +447,8 @@ function DashboardView({
     { l: "Patrimoine net", v: fmt(totalBrut - totalDette), color: "#34d399", Icon: TrendingUp },
     { l: "Loyers annuels", v: fmt(loyers), color: "#a78bfa", Icon: Euro },
     { l: "Cash-flow / mois", v: `${cf >= 0 ? "+" : ""}${fmt(cf)}`, color: "#34d399", Icon: ArrowUpRight },
-    { l: "Rendement brut", v: totalBrut > 0 ? `${(loyers / totalBrut * 100).toFixed(2)} %` : "—", color: "#fbbf24", Icon: BarChart2 },
+    { l: "Rendement brut", v: formatYieldPct(yieldPct.brut), color: "#fbbf24", Icon: BarChart2 },
+    { l: "Rendement net", v: formatYieldPct(yieldPct.net), color: "#34d399", Icon: TrendingUp },
   ];
 
   const personalKpis = personal
@@ -445,6 +459,8 @@ function DashboardView({
         { l: "Ma part — loyers/an", v: fmt(personal.loyers), color: "#a78bfa", Icon: Euro },
         { l: "Ma part — cash/mois", v: `${personal.cash >= 0 ? "+" : ""}${fmt(personal.cash)}`, color: personal.cash >= 0 ? "#34d399" : "#f87171", Icon: ArrowUpRight },
         { l: "Ma part — mensualités", v: fmt(personal.mensualites), color: "#c4b5fd", Icon: BarChart2 },
+        { l: "Ma part — rdt brut", v: formatYieldPct(personalYield?.brut), color: "#fbbf24", Icon: BarChart2 },
+        { l: "Ma part — rdt net", v: formatYieldPct(personalYield?.net), color: "#34d399", Icon: TrendingUp },
       ]
     : [];
 

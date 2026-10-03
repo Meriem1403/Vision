@@ -4,3 +4,12 @@ dist
 .env
 .env.*
 *.log
+
+# Documents confidentiels client (TAM, Excel, exports)
+private/*
+!private/README.md
+*.pdf
+*.xlsx
+*.xls
+*.xlsm
+*.csv

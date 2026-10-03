@@ -78,6 +78,9 @@ function buildPayload(
         patrimoineNet: totalValeur - totalDette,
         tauxEndettement: totalValeur > 0 ? Math.round((totalDette / totalValeur) * 1000) / 10 : 0,
         rendementBrut: totalValeur > 0 ? Math.round((totalLoyers / totalValeur) * 10000) / 100 : 0,
+        rendementNet: totalValeur > 0
+          ? Math.round(((totalLoyers - props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0)) / totalValeur) * 10000) / 100
+          : 0,
       }),
       ...(opts.includeEndettement && {
         detteTotale: totalDette,
@@ -291,6 +294,12 @@ export function BankDossierView({ user, entityOptions, properties, scis }: BankD
             )}
             {preview.synthese.cashMensuelNet != null && (
               <div className="vision-surface rounded-xl p-3"><p className="text-xs vision-text-muted">Cash/mois</p><p className="text-sm font-bold font-mono">{fmt(preview.synthese.cashMensuelNet)}</p></div>
+            )}
+            {preview.synthese.rendementBrut != null && (
+              <div className="vision-surface rounded-xl p-3"><p className="text-xs vision-text-muted">Rdt brut</p><p className="text-sm font-bold font-mono text-amber-300">{preview.synthese.rendementBrut} %</p></div>
+            )}
+            {preview.synthese.rendementNet != null && (
+              <div className="vision-surface rounded-xl p-3"><p className="text-xs vision-text-muted">Rdt net</p><p className="text-sm font-bold font-mono vision-positive-text">{preview.synthese.rendementNet} %</p></div>
             )}
           </div>
         </motion.div>

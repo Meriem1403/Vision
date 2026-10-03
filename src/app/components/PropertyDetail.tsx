@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { buildAmortizationSchedule, computeLoanSummary, type LoanInput } from "@/lib/loanCalculator";
+import { computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricCard } from "./MetricWithFormula";
 import { lbl } from "./layout";
 
@@ -50,6 +51,7 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
   const cr = property.prixAchat + property.travaux + property.fraisNotaire;
   const pv = property.valeurActuelle - cr;
   const cf = Math.round(property.loyer - (property.credit?.mensualite ?? 0) - property.taxeFonciere / 12);
+  const yieldPct = computePropertyYield(property);
   const loanInput: LoanInput | null = property.credit ? {
     montantInitial: property.credit.montantInitial,
     tauxAnnuel: property.credit.taux,
@@ -75,6 +77,8 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
         <MetricCard label="Plus-value" value={`${pv >= 0 ? "+" : ""}${fmt(pv)}`} color={pv >= 0 ? "#34d399" : "#f87171"} />
         <MetricCard label="Loyer mensuel" value={property.loyer > 0 ? fmt(property.loyer) : "—"} />
         <MetricCard label="Cash-flow mensuel" value={`${cf >= 0 ? "+" : ""}${fmt(cf)}`} color={cf >= 0 ? "#34d399" : "#f87171"} />
+        <MetricCard label="Rendement brut" value={formatYieldPct(yieldPct.brut)} color="#fbbf24" />
+        <MetricCard label="Rendement net" value={formatYieldPct(yieldPct.net)} color="#34d399" />
         <MetricCard label="Taxe foncière / an" value={fmt(property.taxeFonciere)} />
         <MetricCard label="Assurance / an" value={fmt(property.assurance)} />
       </div>
