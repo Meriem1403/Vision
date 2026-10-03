@@ -11,7 +11,7 @@ import {
   TrendingUp, Bell, Plus, ArrowUpRight, ArrowDownRight, Pencil,
   Trash2, Check, X, ChevronLeft, Phone, Mail, MapPin, Calendar,
   Shield, Key, AlertTriangle, Euro, BarChart2, Menu, LayoutGrid,
-  List, Eye, ChevronDown, Maximize2, Palette, LogOut, Banknote, Landmark,
+  List, Eye, ChevronDown, ChevronUp, Maximize2, Palette, LogOut, Banknote, Landmark,
 } from "lucide-react";
 import { AppDetailDrawer, FullPageDetail, fullPageHeaderTitle, fullPageHeaderSubtitle } from "@/app/components/DetailLayer";
 import type { DetailTarget } from "@/app/detail";
@@ -161,11 +161,85 @@ const slideV = { hidden: { opacity: 0, height: 0 }, show: { opacity: 1, height: 
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
 
-function GI({ label, className = "", ...p }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; className?: string }) {
+function GI({ label, className = "", type, onChange, value, ...p }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; className?: string }) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const isDate = type === "date" || type === "datetime-local" || type === "month";
+  const isNumber = type === "number";
+
+  const emitNumber = (next: number) => {
+    if (!onChange) return;
+    const str = String(next);
+    onChange({
+      target: { value: str, name: p.name, type: "number" },
+      currentTarget: { value: str, name: p.name, type: "number" },
+    } as React.ChangeEvent<HTMLInputElement>);
+  };
+
+  const stepNumber = (dir: 1 | -1) => {
+    const step = Number(p.step ?? 1) || 1;
+    const min = p.min !== undefined && p.min !== "" ? Number(p.min) : Number.NEGATIVE_INFINITY;
+    const max = p.max !== undefined && p.max !== "" ? Number(p.max) : Number.POSITIVE_INFINITY;
+    const cur = Number(value === "" || value === undefined ? inputRef.current?.value : value) || 0;
+    const next = Math.min(max, Math.max(min, Math.round((cur + dir * step) * 1e6) / 1e6));
+    emitNumber(next);
+  };
+
+  const openDatePicker = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    try {
+      el.showPicker?.();
+    } catch {
+      el.focus();
+    }
+  };
+
   return (
     <div className={className}>
       {label && <label className={lbl}>{label}</label>}
-      <input className={inp} {...p} />
+      <div className="relative w-full min-w-0">
+        <input
+          ref={inputRef}
+          type={type}
+          className={`${inp} vision-input-controlled ${isDate || isNumber ? "pr-10" : ""}`}
+          {...p}
+          value={value}
+          onChange={onChange}
+        />
+        {isDate && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Choisir une date"
+            onClick={openDatePicker}
+            className="vision-field-icon absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md"
+          >
+            <Calendar size={16} strokeWidth={2} />
+          </button>
+        )}
+        {isNumber && (
+          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5">
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Augmenter"
+              onClick={() => stepNumber(1)}
+              className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded"
+            >
+              <ChevronUp size={14} strokeWidth={2.25} />
+            </button>
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Diminuer"
+              onClick={() => stepNumber(-1)}
+              className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded"
+            >
+              <ChevronDown size={14} strokeWidth={2.25} />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -178,7 +252,7 @@ function GS({ label, options, className = "", id, ...p }: React.SelectHTMLAttrib
         <select id={selectId} className={selectCls} {...p}>
           {options.map((o) => <option key={o.value} value={o.value} className="vision-input vision-text">{o.label}</option>)}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 vision-text-muted w-4 h-4 sm:w-5 sm:h-5" aria-hidden />
+        <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5" style={{ color: "var(--v-accent-text)" }} aria-hidden />
       </div>
     </div>
   );
