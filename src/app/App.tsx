@@ -202,16 +202,6 @@ function GI({ label, className = "", type, onChange, value, ...p }: React.InputH
     emitNumber(next);
   };
 
-  const openDatePicker = () => {
-    const el = inputRef.current;
-    if (!el) return;
-    try {
-      el.showPicker?.();
-    } catch {
-      el.focus();
-    }
-  };
-
   return (
     <div className={className}>
       {label && <label className={lbl}>{label}</label>}
@@ -225,15 +215,12 @@ function GI({ label, className = "", type, onChange, value, ...p }: React.InputH
           onChange={onChange}
         />
         {isDate && (
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label="Choisir une date"
-            onClick={openDatePicker}
-            className="vision-field-icon absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md"
+          <span
+            aria-hidden
+            className="vision-field-icon pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md z-[1]"
           >
             <Calendar size={16} strokeWidth={2} />
-          </button>
+          </span>
         )}
         {isNumber && (
           <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5">

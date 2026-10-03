@@ -132,16 +132,33 @@
   width: 0;
   height: 0;
 }
+/* Une seule icône calendrier : on cache le pictogramme natif (surtout Safari)
+   et on laisse une zone transparente à droite pour ouvrir le picker. */
+.vision-input-controlled[type="date"],
+.vision-input-controlled[type="datetime-local"],
+.vision-input-controlled[type="month"],
+.vision-input-controlled[type="time"] {
+  position: relative;
+}
 .vision-input-controlled[type="date"]::-webkit-calendar-picker-indicator,
 .vision-input-controlled[type="datetime-local"]::-webkit-calendar-picker-indicator,
 .vision-input-controlled[type="month"]::-webkit-calendar-picker-indicator,
 .vision-input-controlled[type="time"]::-webkit-calendar-picker-indicator {
-  display: none !important;
-  -webkit-appearance: none;
-  appearance: none;
-  opacity: 0;
-  width: 0;
-  height: 0;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  opacity: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  cursor: pointer;
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  padding: 0;
+  z-index: 3;
 }
 
 .vision-nav-active {
