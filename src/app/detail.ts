@@ -8,7 +8,8 @@ export type View =
   | "patrimoine"
   | "alertes"
   | "dossiers"
-  | "portail-banque";
+  | "portail-banque"
+  | "comptes";
 
 export type DetailTarget =
   | { kind: "property"; id: string; section?: "property" | "credit" }
@@ -28,4 +29,5 @@ export const FULL_PAGE_BACK: Record<View, string> = {
   alertes: "Retour aux alertes",
   dossiers: "Retour aux dossiers",
   "portail-banque": "Retour au portail",
+  comptes: "Retour aux comptes",
 };

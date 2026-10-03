@@ -9,6 +9,10 @@ export interface AuthUser {
   role: UserRole;
   bankName?: string | null;
   shareholderName?: string | null;
+  /** null/undefined = toutes les vues du rôle */
+  allowedViews?: string[] | null;
+  /** ASSOCIE : null = toutes les SCI où il est actionnaire */
+  allowedEntitySlugs?: string[] | null;
 }
 
 const USER_KEY = "vision_auth_user";
