@@ -231,6 +231,42 @@ export function AddressAutocomplete({
 
   return (
     <div className={`space-y-3 ${className}`} ref={wrapRef}>
+      <div className="relative min-w-0">
+        <label className={lbl} htmlFor={`${listId}-address`}>Adresse</label>
+        <div className="relative">
+          <MapPin
+            size={16}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 vision-text-muted"
+            aria-hidden
+          />
+          <input
+            ref={addressRef}
+            id={`${listId}-address`}
+            type="text"
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={open && activeField === "address"}
+            aria-controls={`${listId}-list`}
+            aria-autocomplete="list"
+            className={`${inp} pl-10 ${loading && activeField === "address" ? "pr-10" : ""}`}
+            placeholder="Ex. 22 rue Séry"
+            value={value.address}
+            onChange={(e) => {
+              setActiveField("address");
+              onChange({ ...value, address: e.target.value });
+            }}
+            onFocus={() => {
+              setActiveField("address");
+              if (suggestions.length > 0) setOpen(true);
+            }}
+            onKeyDown={onKeyNav}
+          />
+          {loading && activeField === "address" && (
+            <Loader2 size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin vision-text-muted" aria-hidden />
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-3 gap-3">
         <div className="min-w-0 relative">
           <label className={lbl} htmlFor={`${listId}-cp`}>Code postal</label>
@@ -276,42 +312,6 @@ export function AddressAutocomplete({
               <Loader2 size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin vision-text-muted" aria-hidden />
             )}
           </div>
-        </div>
-      </div>
-
-      <div className="relative min-w-0">
-        <label className={lbl} htmlFor={`${listId}-address`}>Adresse</label>
-        <div className="relative">
-          <MapPin
-            size={16}
-            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 vision-text-muted"
-            aria-hidden
-          />
-          <input
-            ref={addressRef}
-            id={`${listId}-address`}
-            type="text"
-            autoComplete="off"
-            role="combobox"
-            aria-expanded={open && activeField === "address"}
-            aria-controls={`${listId}-list`}
-            aria-autocomplete="list"
-            className={`${inp} pl-10 ${loading && activeField === "address" ? "pr-10" : ""}`}
-            placeholder="Ex. 22 rue Séry"
-            value={value.address}
-            onChange={(e) => {
-              setActiveField("address");
-              onChange({ ...value, address: e.target.value });
-            }}
-            onFocus={() => {
-              setActiveField("address");
-              if (suggestions.length > 0) setOpen(true);
-            }}
-            onKeyDown={onKeyNav}
-          />
-          {loading && activeField === "address" && (
-            <Loader2 size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin vision-text-muted" aria-hidden />
-          )}
         </div>
       </div>
 
