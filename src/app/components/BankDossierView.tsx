@@ -512,36 +512,151 @@ export function BankDossierView({ user, entityOptions, properties, scis }: BankD
         )}
       </div>
 
-      {selectedDossier && (
-        <div className={`${G} p-5`}>
-          <div className="flex flex-wrap justify-between gap-2 mb-4">
-            <p className="font-bold vision-text">{String(selectedDossier.title)}</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={btnP}
-                onClick={() => {
-                  const payload = selectedDossier.payload as ReturnType<typeof buildPayload>;
-                  if (!payload?.synthese) return;
-                  openPdfPreview(payload, {
-                    title: String(selectedDossier.title ?? title),
-                    targetBank: String(selectedDossier.target_bank ?? selectedDossier.targetBank ?? targetBank),
-                    message: String(selectedDossier.message ?? ""),
-                    montant: Number(selectedDossier.montant_demande ?? selectedDossier.montantDemande ?? montant),
-                    objet: String(selectedDossier.objet ?? objet),
-                  });
-                }}
-              >
-                <FileText size={14} /> PDF
-              </button>
-              <button type="button" onClick={() => setSelectedDossier(null)} className={btnG}>Fermer</button>
+      {selectedDossier && (() => {
+        const payload = selectedDossier.payload as ReturnType<typeof buildPayload> | null;
+        const syn = payload?.synthese ?? {};
+        const entites = payload?.entites ?? [];
+        const biens = payload?.biens ?? [];
+        const banks = Array.isArray(syn.repartitionBanques)
+          ? (syn.repartitionBanques as Array<{ banque: string; nombreCredits: number; capitalRestant: number; mensualites: number }>)
+          : [];
+        const metaBank = String(selectedDossier.target_bank ?? selectedDossier.targetBank ?? "—");
+        const metaMontant = Number(selectedDossier.montant_demande ?? selectedDossier.montantDemande ?? 0);
+        const metaObjet = String(selectedDossier.objet ?? "—");
+        const metaRef = String(selectedDossier.reference ?? "");
+        const metaStatus = STATUS_LABEL[statusOf(selectedDossier)] ?? statusOf(selectedDossier);
+
+        return (
+          <div className={`${G} p-5 space-y-5`}>
+            <div className="flex flex-wrap justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-bold vision-text">{String(selectedDossier.title)}</p>
+                <p className="text-xs vision-text-muted mt-0.5">
+                  {metaRef} · {metaBank} · {metaStatus}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={btnP}
+                  onClick={() => {
+                    if (!payload?.synthese) {
+                      toast.error("Données du dossier incompletes.");
+                      return;
+                    }
+                    openPdfPreview(payload, {
+                      title: String(selectedDossier.title ?? title),
+                      targetBank: metaBank,
+                      message: String(selectedDossier.message ?? ""),
+                      montant: metaMontant || undefined,
+                      objet: metaObjet !== "—" ? metaObjet : undefined,
+                    });
+                  }}
+                >
+                  <FileText size={14} /> Voir PDF
+                </button>
+                <button type="button" onClick={() => setSelectedDossier(null)} className={btnG}>Fermer</button>
+              </div>
             </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="vision-surface rounded-xl p-3">
+                <p className="text-xs vision-text-muted">Montant demandé</p>
+                <p className="text-sm font-bold font-mono vision-text">{metaMontant ? fmt(metaMontant) : "—"}</p>
+              </div>
+              <div className="vision-surface rounded-xl p-3 sm:col-span-3">
+                <p className="text-xs vision-text-muted">Objet</p>
+                <p className="text-sm font-semibold vision-text">{metaObjet}</p>
+              </div>
+              {typeof syn.patrimoineBrut === "number" && (
+                <div className="vision-surface rounded-xl p-3">
+                  <p className="text-xs vision-text-muted">Patrimoine brut</p>
+                  <p className="text-sm font-bold font-mono vision-info-text">{fmt(syn.patrimoineBrut)}</p>
+                </div>
+              )}
+              {typeof syn.patrimoineNet === "number" && (
+                <div className="vision-surface rounded-xl p-3">
+                  <p className="text-xs vision-text-muted">Patrimoine net</p>
+                  <p className="text-sm font-bold font-mono vision-positive-text">{fmt(syn.patrimoineNet)}</p>
+                </div>
+              )}
+              {typeof syn.detteTotale === "number" && (
+                <div className="vision-surface rounded-xl p-3">
+                  <p className="text-xs vision-text-muted">Dette</p>
+                  <p className="text-sm font-bold font-mono vision-negative-text">{fmt(syn.detteTotale)}</p>
+                </div>
+              )}
+              {typeof syn.cashMensuelNet === "number" && (
+                <div className="vision-surface rounded-xl p-3">
+                  <p className="text-xs vision-text-muted">Cash / mois</p>
+                  <p className="text-sm font-bold font-mono vision-text">{fmt(syn.cashMensuelNet)}</p>
+                </div>
+              )}
+              {typeof syn.rendementBrut === "number" && (
+                <div className="vision-surface rounded-xl p-3">
+                  <p className="text-xs vision-text-muted">Rdt brut</p>
+                  <p className="text-sm font-bold font-mono text-amber-300">{syn.rendementBrut} %</p>
+                </div>
+              )}
+              {typeof syn.rendementNet === "number" && (
+                <div className="vision-surface rounded-xl p-3">
+                  <p className="text-xs vision-text-muted">Rdt net</p>
+                  <p className="text-sm font-bold font-mono vision-positive-text">{syn.rendementNet} %</p>
+                </div>
+              )}
+            </div>
+
+            {entites.length > 0 && (
+              <div>
+                <p className={`${lbl} mb-2`}>Entités</p>
+                <div className="space-y-1.5">
+                  {entites.map((e) => (
+                    <div key={e.shortName} className="flex items-center justify-between gap-3 text-sm vision-surface rounded-xl px-3 py-2">
+                      <span className="font-semibold vision-text">{e.shortName}</span>
+                      <span className="text-xs vision-text-muted font-mono">
+                        {fmt(e.valeurEstimee)} · dette {fmt(e.dette)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {biens.length > 0 && (
+              <div>
+                <p className={`${lbl} mb-2`}>Biens ({biens.length})</p>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {biens.map((b, i) => (
+                    <div key={`${b.address}-${i}`} className="vision-surface rounded-xl px-3 py-2.5">
+                      <p className="text-sm font-semibold vision-text">{b.address}, {b.ville}</p>
+                      <p className="text-xs vision-text-muted mt-0.5">
+                        {b.type} · {fmt(b.valeurActuelle)} · loyer {fmt(b.loyer)} · cash {fmt(b.cashMensuel)}
+                        {b.credit ? ` · ${b.credit.banque} (CRD ${fmt(b.credit.capitalRestant)})` : " · sans crédit"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {banks.length > 0 && (
+              <div>
+                <p className={`${lbl} mb-2`}>Répartition banques</p>
+                <div className="space-y-1.5">
+                  {banks.map((b) => (
+                    <div key={b.banque} className="flex items-center justify-between gap-3 text-sm vision-surface rounded-xl px-3 py-2">
+                      <span className="font-semibold vision-text">{b.banque}</span>
+                      <span className="text-xs vision-text-muted font-mono">
+                        {b.nombreCredits} crédit{b.nombreCredits > 1 ? "s" : ""} · CRD {fmt(b.capitalRestant)} · {fmt(b.mensualites)}/m
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <pre className="text-xs vision-text-muted overflow-auto max-h-96 vision-surface rounded-xl p-4">
-            {JSON.stringify(selectedDossier.payload, null, 2)}
-          </pre>
-        </div>
-      )}
+        );
+      })()}
 
       {pdfUrl && (
         <PdfPreviewModal
