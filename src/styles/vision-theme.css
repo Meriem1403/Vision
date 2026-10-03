@@ -87,7 +87,6 @@
   background: var(--v-input-bg);
   border-color: var(--v-input-border);
   color: var(--v-text);
-  color-scheme: dark;
 }
 
 .vision-input::placeholder {
@@ -99,46 +98,50 @@
   background: var(--v-input-bg);
   border-color: var(--v-input-border);
   color: var(--v-text);
-  color-scheme: dark;
 }
 
-/* Thèmes clairs : contrôles natifs (calendrier, flèches) lisibles */
-:root[data-vision-theme="aube"] .vision-input,
-:root[data-vision-theme="aube"] .vision-select,
-:root[data-vision-light="true"] .vision-input,
-:root[data-vision-light="true"] .vision-select {
-  color-scheme: light;
-}
-
-/* Number : garder les flèches, couleur adaptée via color-scheme */
-.vision-input[type="number"] {
-  appearance: auto;
-}
-
-/* Date : icône calendrier native teintée (taille normale, pas d’overlay) */
-.vision-input[type="date"]::-webkit-calendar-picker-indicator,
-.vision-input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-.vision-input[type="month"]::-webkit-calendar-picker-indicator,
-.vision-input[type="time"]::-webkit-calendar-picker-indicator {
+/* Icônes custom des champs (calendrier / flèches) — couleurs Vision */
+.vision-field-icon {
+  color: var(--v-accent-text);
+  background: transparent;
+  border: none;
   cursor: pointer;
-  opacity: 0.85;
-  width: 1.1rem;
-  height: 1.1rem;
   padding: 0;
-  margin-left: 0.25rem;
-  filter: invert(1) brightness(1.4);
+  line-height: 0;
+  transition: color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+.vision-field-icon:hover {
+  color: var(--v-text);
+  background: var(--v-surface-strong);
+}
+.vision-field-icon:active {
+  opacity: 0.85;
 }
 
-:root[data-vision-theme="aube"] .vision-input[type="date"]::-webkit-calendar-picker-indicator,
-:root[data-vision-theme="aube"] .vision-input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-:root[data-vision-theme="aube"] .vision-input[type="month"]::-webkit-calendar-picker-indicator,
-:root[data-vision-theme="aube"] .vision-input[type="time"]::-webkit-calendar-picker-indicator,
-:root[data-vision-light="true"] .vision-input[type="date"]::-webkit-calendar-picker-indicator,
-:root[data-vision-light="true"] .vision-input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-:root[data-vision-light="true"] .vision-input[type="month"]::-webkit-calendar-picker-indicator,
-:root[data-vision-light="true"] .vision-input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: none;
-  opacity: 0.65;
+/* Masquer totalement les contrôles natifs (illisibles sur fond sombre) */
+.vision-input-controlled[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.vision-input-controlled[type="number"]::-webkit-inner-spin-button,
+.vision-input-controlled[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  display: none;
+  width: 0;
+  height: 0;
+}
+.vision-input-controlled[type="date"]::-webkit-calendar-picker-indicator,
+.vision-input-controlled[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.vision-input-controlled[type="month"]::-webkit-calendar-picker-indicator,
+.vision-input-controlled[type="time"]::-webkit-calendar-picker-indicator {
+  display: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
 .vision-nav-active {
