@@ -1,6 +1,6 @@
 /**
  * Série annuelle « Évolution du patrimoine » à partir des biens / crédits réels.
- * Remplace l’ancien jeu de données figé 2017–2024.
+ * Passé interpolé + futur projeté (valeur constante, dette amortie jusqu’à fin des prêts).
  */
 import { creationToInputValue } from "@/lib/creationDate";
 import {
@@ -17,8 +17,10 @@ export type PatrimoinePoint = {
   valeur: number;
   /** Dette (CRD) en k€ */
   dette: number;
-  /** Net en k€ */
+  /** Net en k€ (peut être négatif) */
   net: number;
+  /** Année > année courante (projection) */
+  futur?: boolean;
 };
 
 type CreditLike = {
@@ -26,6 +28,7 @@ type CreditLike = {
   taux: number;
   duree: number;
   debut: string;
+  finCredit?: string | null;
   assuranceMensuelle?: number;
   mensualite: number;
   capitalRestant: number;
@@ -47,6 +50,9 @@ type SciLike = {
   valeurEstimee: number;
 };
 
+/** Nombre d’années visibles dans la fenêtre du graphique. */
+export const PATRIMOINE_WINDOW_YEARS = 8;
+
 function yearFromIsoOrCreation(value: string | null | undefined): number | null {
   if (!value?.trim()) return null;
   const iso = creationToInputValue(value) || value;
@@ -64,28 +70,58 @@ function acquisitionYear(p: PropertyLike, sciById: Map<string, SciLike>): number
   return sci ? yearFromIsoOrCreation(sci.creation) : null;
 }
 
-function costBasis(p: PropertyLike): number {
-  const cost = (p.prixAchat || 0) + (p.travaux || 0) + (p.fraisNotaire || 0);
-  return cost > 0 ? cost : p.valeurActuelle || 0;
+function creditEndYear(credit: CreditLike): number | null {
+  if (credit.finCredit) {
+    const y = yearFromIsoOrCreation(credit.finCredit);
+    if (y != null) return y;
+  }
+  if (credit.debut && credit.duree > 0) {
+    const d = parseLocalDate(credit.debut);
+    if (!Number.isNaN(d.getTime())) {
+      d.setMonth(d.getMonth() + credit.duree);
+      return d.getFullYear();
+    }
+  }
+  return null;
 }
 
-/** Valeur du bien au 31/12 de `year` (interpolation coût → valeur actuelle). */
+function costBasis(p: PropertyLike): number {
+  return (p.prixAchat || 0) + (p.travaux || 0) + (p.fraisNotaire || 0);
+}
+
+/**
+ * Valeur du bien au 31/12 de `year`.
+ * - avant acquisition : 0
+ * - passé : interpolation coût → valeur actuelle (si coût connu), sinon valeur actuelle constante
+ * - présent / futur : valeur actuelle
+ */
 function propertyValueAtYear(p: PropertyLike, year: number, nowYear: number, startYear: number | null): number {
   if (startYear != null && year < startYear) return 0;
   const current = p.valeurActuelle || 0;
   if (year >= nowYear) return current;
+
   const start = startYear ?? nowYear;
   const cost = costBasis(p);
+  // Pas de coût saisi : on ne invente pas d’historique — plat à la valeur actuelle
+  if (cost <= 0) return current;
   if (nowYear <= start) return current;
   const t = (year - start) / (nowYear - start);
   return Math.max(0, cost + (current - cost) * Math.min(1, Math.max(0, t)));
 }
 
-function crdAtYearEnd(credit: CreditLike, year: number): number {
-  const projection = new Date(year, 11, 1); // 1er décembre = fin d’année fiscale approx.
+/** CRD au 1er décembre de l’année — 0 si le prêt n’a pas encore commencé. */
+export function crdAtYearEnd(credit: CreditLike, year: number): number {
+  if (!credit) return 0;
+  const projection = new Date(year, 11, 1);
+
+  if (credit.debut?.trim()) {
+    const debut = parseLocalDate(credit.debut);
+    if (!Number.isNaN(debut.getTime()) && projection < debut) return 0;
+  }
+
   if (hasInterestOnlyAmortization(credit) || hasRateBasedAmortization(credit)) {
     if (!credit.debut || !credit.duree || !credit.montantInitial) {
-      return year >= new Date().getFullYear() ? credit.capitalRestant || 0 : 0;
+      return credit.capitalRestant || 0;
     }
     return getCrdAtDate(
       {
@@ -100,7 +136,6 @@ function crdAtYearEnd(credit: CreditLike, year: number): number {
     );
   }
 
-  // Excel / flat : CRD_réf − mensualité × mois depuis début
   const refDate = credit.debut ? parseLocalDate(credit.debut) : new Date(year, 0, 1);
   if (Number.isNaN(refDate.getTime())) return credit.capitalRestant || 0;
   if (projection < refDate) return 0;
@@ -118,7 +153,7 @@ function toK(n: number): number {
 
 /**
  * Construit la série annuelle valeur / dette / net (en k€).
- * @param shareRatioFn optionnel — ratio 0–1 par sciId (quote-part associée)
+ * Valeur alignée sur la somme des biens (comme le KPI « Valeur de marché »).
  */
 export function buildPatrimoineEvolution(
   properties: PropertyLike[],
@@ -127,13 +162,14 @@ export function buildPatrimoineEvolution(
     asOf?: Date;
     shareRatioFn?: (sciId: string) => number;
   },
-): { data: PatrimoinePoint[]; fromYear: number; toYear: number } {
+): { data: PatrimoinePoint[]; fromYear: number; toYear: number; nowYear: number } {
   const asOf = opts?.asOf ?? new Date();
   const nowYear = asOf.getFullYear();
   const sciById = new Map(scis.map((s) => [s.id, s]));
   const ratioOf = opts?.shareRatioFn ?? (() => 1);
 
   const startCandidates: number[] = [];
+  const endCandidates: number[] = [nowYear];
   for (const sci of scis) {
     const y = yearFromIsoOrCreation(sci.creation);
     if (y != null) startCandidates.push(y);
@@ -141,10 +177,27 @@ export function buildPatrimoineEvolution(
   for (const p of properties) {
     const y = acquisitionYear(p, sciById);
     if (y != null) startCandidates.push(y);
+    if (p.credit) {
+      const end = creditEndYear(p.credit);
+      if (end != null) endCandidates.push(end);
+    }
   }
 
   const fromYear = startCandidates.length ? Math.min(...startCandidates) : Math.max(2015, nowYear - 8);
-  const toYear = nowYear;
+  const toYear = Math.max(...endCandidates);
+
+  // Aligné KPI Patrimoine : somme des valeurs de biens (pas valeurEstimee SCI qui peut diverger)
+  const liveValeurFromProps = properties.reduce(
+    (s, p) => s + (p.valeurActuelle || 0) * ratioOf(p.sciId),
+    0,
+  );
+  const liveValeurFromScis = scis.reduce((s, sci) => s + (sci.valeurEstimee || 0) * ratioOf(sci.id), 0);
+  const liveValeur = liveValeurFromProps > 0 ? liveValeurFromProps : liveValeurFromScis;
+
+  const liveDette = properties.reduce(
+    (s, p) => s + (p.credit?.capitalRestant ?? 0) * ratioOf(p.sciId),
+    0,
+  );
 
   const data: PatrimoinePoint[] = [];
   for (let year = fromYear; year <= toYear; year++) {
@@ -158,29 +211,41 @@ export function buildPatrimoineEvolution(
       if (p.credit) dette += crdAtYearEnd(p.credit, year) * r;
     }
 
-    // Dernier point : coller aux totaux « vivants » (valeur SCI + CRD actuel)
-    if (year === toYear) {
-      const liveValeur = scis.reduce((s, sci) => s + (sci.valeurEstimee || 0) * ratioOf(sci.id), 0);
-      const liveDette = properties.reduce(
-        (s, p) => s + (p.credit?.capitalRestant ?? 0) * ratioOf(p.sciId),
-        0,
-      );
-      if (liveValeur > 0) valeur = liveValeur;
+    if (year === nowYear) {
+      // Point courant : mêmes totaux que les KPI
+      valeur = liveValeur;
       dette = liveDette;
+    } else if (year > nowYear) {
+      valeur = liveValeur;
+      // dette : projection amortissement (déjà calculée ci-dessus)
     }
 
     data.push({
       an: String(year),
       valeur: toK(valeur),
       dette: toK(dette),
-      net: toK(Math.max(0, valeur - dette)),
+      net: toK(valeur - dette),
+      futur: year > nowYear,
     });
   }
 
-  return { data, fromYear, toYear };
+  return { data, fromYear, toYear, nowYear };
 }
 
 export function patrimoineRangeLabel(fromYear: number, toYear: number): string {
   if (fromYear === toYear) return `${fromYear} · milliers d'euros`;
   return `${fromYear}–${toYear} · milliers d'euros`;
+}
+
+/** Index de départ pour afficher une fenêtre se terminant sur l’année courante. */
+export function defaultPatrimoineWindowStart(
+  data: PatrimoinePoint[],
+  nowYear: number,
+  windowSize = PATRIMOINE_WINDOW_YEARS,
+): number {
+  if (data.length <= windowSize) return 0;
+  const nowIdx = data.findIndex((d) => d.an === String(nowYear));
+  const maxStart = data.length - windowSize;
+  if (nowIdx < 0) return maxStart;
+  return Math.max(0, Math.min(maxStart, nowIdx - windowSize + 1));
 }
