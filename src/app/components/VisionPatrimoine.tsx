@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { getCrdAtDate, hasRateBasedAmortization, monthsBetween, parseLocalDate, projectFlatCrd } from "@/lib/loanCalculator";
+import {
+  getCrdAtDate,
+  hasInterestOnlyAmortization,
+  hasRateBasedAmortization,
+  monthsBetween,
+  parseLocalDate,
+  projectFlatCrd,
+} from "@/lib/loanCalculator";
 import { pageWrap, pageEndSpacer, G } from "./layout";
 import { GSelect, monthOptions, buildYearOptions } from "./GSelect";
 
@@ -38,6 +45,7 @@ interface Credit {
   capitalRestant: number;
   banque?: string;
   finCredit?: string | null;
+  amortizationModel?: string | null;
 }
 interface Property { id: string; sciId: string; address: string; type: string; lots: number; loyer: number; taxeFonciere: number; valeurActuelle: number; gestionDeleguee?: boolean; honorairesGestionPct?: number; credit?: Credit }
 interface SCI {
@@ -59,22 +67,23 @@ function excelCash(p: Property) {
 
 function finCreditLabel(c: Credit) {
   if (c.finCredit) {
-    const d = new Date(c.finCredit);
+    const d = parseLocalDate(c.finCredit);
     if (!Number.isNaN(d.getTime())) {
       return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
     }
   }
   if (c.debut && c.duree) {
-    const d = new Date(c.debut);
-    d.setMonth(d.getMonth() + c.duree);
-    return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+    const d = parseLocalDate(c.debut);
+    if (!Number.isNaN(d.getTime())) {
+      d.setMonth(d.getMonth() + c.duree);
+      return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+    }
   }
   return "—";
 }
 
 function projectedCrd(credit: Credit, projection: Date, sciId: string): number {
-  // Nouveau bien / prêt classique : tableau d’amortissement à taux
-  if (hasRateBasedAmortization(credit)) {
+  if (hasInterestOnlyAmortization(credit) || hasRateBasedAmortization(credit)) {
     return getCrdAtDate(
       {
         montantInitial: credit.montantInitial,
@@ -82,6 +91,7 @@ function projectedCrd(credit: Credit, projection: Date, sciId: string): number {
         dureeMois: credit.duree,
         dateDebut: credit.debut,
         assuranceMensuelle: credit.assuranceMensuelle,
+        amortizationModel: credit.amortizationModel,
       },
       projection,
     );
@@ -121,11 +131,11 @@ function PropertyMobileCard({ line, onSelect }: { line: { p: Property; crdRef: n
 
 function creditEndYear(c: Credit): number | null {
   if (c.finCredit) {
-    const d = new Date(c.finCredit);
+    const d = parseLocalDate(c.finCredit);
     if (!Number.isNaN(d.getTime())) return d.getFullYear();
   }
   if (c.debut && c.duree) {
-    const d = new Date(c.debut);
+    const d = parseLocalDate(c.debut);
     if (!Number.isNaN(d.getTime())) {
       d.setMonth(d.getMonth() + c.duree);
       return d.getFullYear();
@@ -137,11 +147,11 @@ function creditEndYear(c: Credit): number | null {
 /** Première échéance : date de début, sinon estimation linéaire jusqu’à la fin de prêt. */
 function creditStartYear(c: Credit, refDate: Date): number | null {
   if (c.debut) {
-    const d = new Date(c.debut);
+    const d = parseLocalDate(c.debut);
     if (!Number.isNaN(d.getTime())) return d.getFullYear();
   }
   if (!c.finCredit) return null;
-  const fin = new Date(c.finCredit);
+  const fin = parseLocalDate(c.finCredit);
   if (Number.isNaN(fin.getTime())) return null;
   const finMonth = new Date(fin.getFullYear(), fin.getMonth(), 1);
   const leftAtRef = monthsBetween(refDate, finMonth);

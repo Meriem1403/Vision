@@ -27,3 +27,25 @@ export function cashFlowMensuel(p: PropertyFinanceInput, includeAssurance = fals
   const assMois = includeAssurance ? (p.assurance || 0) / 12 : 0;
   return Math.round(p.loyer - mensCredit - taxeMois - assMois - honorairesGestionMensuel(p));
 }
+
+/**
+ * Détail mensuel pour l’onglet Comptabilité :
+ * loyers − crédits − taxe/12 − assurance/12 − honoraires gestion.
+ */
+export function comptaMensuel(p: PropertyFinanceInput) {
+  const loyers = p.loyer || 0;
+  const credits = p.credit?.mensualite ?? 0;
+  const taxes = (p.taxeFonciere || 0) / 12;
+  const assurances = (p.assurance || 0) / 12;
+  const honoraires = honorairesGestionMensuel(p);
+  const charges = credits + taxes + assurances + honoraires;
+  return {
+    loyers,
+    credits,
+    taxes,
+    assurances,
+    honoraires,
+    charges,
+    result: Math.round(loyers - charges),
+  };
+}

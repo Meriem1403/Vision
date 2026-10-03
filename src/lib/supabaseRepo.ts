@@ -1,5 +1,6 @@
 import type { AuthUser, UserRole } from "./auth";
 import { syncTenantBailTs } from "./bailDates";
+import { resolveAmortizationModel } from "./loanCalculator";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 function requireClient() {
@@ -179,6 +180,7 @@ export interface PropertyRow {
     mensualite: number;
     capitalRestant: number;
     finCredit?: string | null;
+    amortizationModel?: string | null;
   };
 }
 
@@ -278,6 +280,7 @@ export async function fetchPortfolio(): Promise<{
             mensualite: Number(loan.mensualite),
             capitalRestant: Number(loan.capital_restant),
             finCredit: loan.fin_credit ?? null,
+            amortizationModel: (loan.amortization_model as string | null) ?? null,
           }
         : undefined,
     };
@@ -449,7 +452,7 @@ export async function upsertProperty(property: PropertyRow): Promise<PropertyRow
       mensualite: property.credit.mensualite,
       capital_restant: property.credit.capitalRestant,
       fin_credit: property.credit.finCredit || null,
-      amortization_model: property.credit.taux > 0 ? "RATE_BASED" : "EXCEL_FLAT",
+      amortization_model: resolveAmortizationModel(property.credit),
       updated_at: new Date().toISOString(),
     };
     const { data: existingLoan } = await client
