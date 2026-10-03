@@ -40,7 +40,18 @@ import {
   associeShareRatio, PAGE_TITLES, type View,
 } from "@/lib/permissions";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { fetchPortfolio, supabaseGetSessionUser, supabaseLogout } from "@/lib/supabaseRepo";
+import {
+  deleteAlert as sbDeleteAlert,
+  deleteProperty as sbDeleteProperty,
+  deleteSci as sbDeleteSci,
+  deleteTenant as sbDeleteTenant,
+  fetchPortfolio,
+  supabaseGetSessionUser,
+  supabaseLogout,
+  upsertProperty as sbUpsertProperty,
+  upsertSci as sbUpsertSci,
+  upsertTenant as sbUpsertTenant,
+} from "@/lib/supabaseRepo";
 import {
   applyVisionTheme, loadThemeId, loadCustomColors, getPresetVars, customToVars,
   type CustomThemeColors,
@@ -1506,6 +1517,15 @@ function VisionShell() {
   };
 
   const addProp = (p: Property) => {
+    if (useSupabase) {
+      sbUpsertProperty(p)
+        .then((saved) => {
+          setProperties((ps) => [...ps, { ...p, ...saved, credit: saved.credit ? enrichCredit(saved.credit as Credit) : undefined }]);
+          setDataError("");
+        })
+        .catch((e) => setDataError(e instanceof Error ? e.message : "Enregistrement bien impossible"));
+      return;
+    }
     setProperties((ps) => [...ps, p]);
     if (apiOnline) {
       api.createProperty({
@@ -1528,7 +1548,24 @@ function VisionShell() {
     }
   };
   const updProp = (p: Property) => {
-    setProperties((ps) => ps.map((x) => x.id === p.id ? p : x));
+    if (useSupabase) {
+      // Optimistic UI, puis sync DB
+      setProperties((ps) => ps.map((x) => (x.id === p.id ? p : x)));
+      sbUpsertProperty(p)
+        .then((saved) => {
+          setProperties((ps) =>
+            ps.map((x) =>
+              x.id === p.id || x.id === saved.id
+                ? { ...p, ...saved, credit: saved.credit ? enrichCredit(saved.credit as Credit) : undefined }
+                : x,
+            ),
+          );
+          setDataError("");
+        })
+        .catch((e) => setDataError(e instanceof Error ? e.message : "Mise à jour bien impossible"));
+      return;
+    }
+    setProperties((ps) => ps.map((x) => (x.id === p.id ? p : x)));
     if (apiOnline) {
       api.updateProperty(p.id, {
         entityId: p.sciId,
@@ -1550,16 +1587,89 @@ function VisionShell() {
     }
   };
   const delProp = (id: string) => {
+    if (useSupabase) {
+      setProperties((ps) => ps.filter((x) => x.id !== id));
+      sbDeleteProperty(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression bien impossible"));
+      return;
+    }
     setProperties((ps) => ps.filter((x) => x.id !== id));
     if (apiOnline) api.deleteProperty(id).catch(() => {});
   };
-  const addSCI = (s: SCI) => setScis((ss) => [...ss, s]);
-  const updSCI = (s: SCI) => setScis((ss) => ss.map((x) => x.id === s.id ? s : x));
-  const delSCI = (id: string) => setScis((ss) => ss.filter((x) => x.id !== id));
-  const addTenant = (t: Tenant) => setTenants((ts) => [...ts, t]);
-  const updTenant = (t: Tenant) => setTenants((ts) => ts.map((x) => x.id === t.id ? t : x));
-  const delTenant = (id: string) => setTenants((ts) => ts.filter((x) => x.id !== id));
-  const delAlert = (id: string) => setAlerts((as) => as.filter((x) => x.id !== id));
+  const addSCI = (s: SCI) => {
+    if (useSupabase) {
+      sbUpsertSci(s)
+        .then((saved) => {
+          setScis((ss) => [...ss, { ...s, ...saved }]);
+          setDataError("");
+        })
+        .catch((e) => setDataError(e instanceof Error ? e.message : "Enregistrement SCI impossible"));
+      return;
+    }
+    setScis((ss) => [...ss, s]);
+  };
+  const updSCI = (s: SCI) => {
+    if (useSupabase) {
+      setScis((ss) => ss.map((x) => (x.id === s.id ? s : x)));
+      sbUpsertSci(s)
+        .then((saved) => {
+          setScis((ss) => ss.map((x) => (x.id === s.id || x.id === saved.id ? { ...s, ...saved } : x)));
+          setDataError("");
+        })
+        .catch((e) => setDataError(e instanceof Error ? e.message : "Mise à jour SCI impossible"));
+      return;
+    }
+    setScis((ss) => ss.map((x) => (x.id === s.id ? s : x)));
+  };
+  const delSCI = (id: string) => {
+    if (useSupabase) {
+      setScis((ss) => ss.filter((x) => x.id !== id));
+      setProperties((ps) => ps.filter((p) => p.sciId !== id));
+      sbDeleteSci(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression SCI impossible"));
+      return;
+    }
+    setScis((ss) => ss.filter((x) => x.id !== id));
+  };
+  const addTenant = (t: Tenant) => {
+    if (useSupabase) {
+      sbUpsertTenant(t)
+        .then((saved) => {
+          setTenants((ts) => [...ts, { ...t, ...saved }]);
+          setDataError("");
+        })
+        .catch((e) => setDataError(e instanceof Error ? e.message : "Enregistrement locataire impossible"));
+      return;
+    }
+    setTenants((ts) => [...ts, t]);
+  };
+  const updTenant = (t: Tenant) => {
+    if (useSupabase) {
+      setTenants((ts) => ts.map((x) => (x.id === t.id ? t : x)));
+      sbUpsertTenant(t)
+        .then((saved) => {
+          setTenants((ts) => ts.map((x) => (x.id === t.id || x.id === saved.id ? { ...t, ...saved } : x)));
+          setDataError("");
+        })
+        .catch((e) => setDataError(e instanceof Error ? e.message : "Mise à jour locataire impossible"));
+      return;
+    }
+    setTenants((ts) => ts.map((x) => (x.id === t.id ? t : x)));
+  };
+  const delTenant = (id: string) => {
+    if (useSupabase) {
+      setTenants((ts) => ts.filter((x) => x.id !== id));
+      sbDeleteTenant(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression locataire impossible"));
+      return;
+    }
+    setTenants((ts) => ts.filter((x) => x.id !== id));
+  };
+  const delAlert = (id: string) => {
+    if (useSupabase) {
+      setAlerts((as) => as.filter((x) => x.id !== id));
+      sbDeleteAlert(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression alerte impossible"));
+      return;
+    }
+    setAlerts((as) => as.filter((x) => x.id !== id));
+  };
 
   const highAlerts = alerts.filter((a) => a.severity === "high").length;
   const handleNav = (v: View) => {
