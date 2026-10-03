@@ -139,6 +139,30 @@ export function monthsBetween(from: Date, to: Date): number {
   return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
 }
 
+export function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Durée en mois entre date de début et date de fin (1ers du mois). */
+export function dureeFromDebutFin(debut: string, fin: string): number {
+  if (!debut || !fin) return 0;
+  const a = new Date(debut);
+  const b = new Date(fin);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return Math.max(0, monthsBetween(a, b));
+}
+
+/** Date de fin = début + durée (mois). */
+export function finFromDebutDuree(debut: string, dureeMois: number): string | null {
+  if (!debut || !dureeMois || dureeMois <= 0) return null;
+  const a = new Date(debut);
+  if (Number.isNaN(a.getTime())) return null;
+  return toISODate(addMonths(new Date(a.getFullYear(), a.getMonth(), 1), dureeMois));
+}
+
 /**
  * Modèle Excel Beneduc / Troika :
  * CRD(mois) = max(0, CRD_réf − mensualité × nombre de mois depuis la date de réf).
@@ -237,43 +261,91 @@ export function enrichCredit(credit: {
   capitalRestant?: number;
   finCredit?: string | null;
 }) {
+  // Synchroniser début / fin / durée avant calculs
+  let duree = credit.duree;
+  let finCredit = credit.finCredit ?? null;
+  if (credit.debut && finCredit) {
+    duree = dureeFromDebutFin(credit.debut, finCredit);
+  } else if (credit.debut && duree > 0 && !finCredit) {
+    finCredit = finFromDebutDuree(credit.debut, duree);
+  }
+
+  const synced = { ...credit, duree, finCredit };
+
   // Nouveau prêt / prêt à taux : générer mensualité + CRD depuis les paramètres
-  if (hasRateBasedAmortization(credit)) {
+  if (hasRateBasedAmortization(synced)) {
     const summary = computeLoanSummary({
-      montantInitial: credit.montantInitial,
-      tauxAnnuel: credit.taux,
-      dureeMois: credit.duree,
-      dateDebut: credit.debut,
-      assuranceMensuelle: credit.assuranceMensuelle,
+      montantInitial: synced.montantInitial,
+      tauxAnnuel: synced.taux,
+      dureeMois: synced.duree,
+      dateDebut: synced.debut,
+      assuranceMensuelle: synced.assuranceMensuelle,
     });
     return {
-      ...credit,
+      ...synced,
       mensualite: summary.mensualite,
       capitalRestant: summary.capitalRestant,
-      finCredit: credit.finCredit ?? summary.finCredit.toISOString().slice(0, 10),
+      finCredit: synced.finCredit ?? finFromDebutDuree(synced.debut, synced.duree),
     };
   }
 
   // Import Excel (taux 0) : CRD projeté = flat depuis date de début / réf
-  if (credit.debut && credit.mensualite && credit.montantInitial) {
+  if (synced.debut && synced.mensualite && synced.montantInitial) {
     const capitalRestant = projectFlatCrd({
-      capitalAtRef: credit.montantInitial,
-      refDate: new Date(credit.debut),
+      capitalAtRef: synced.montantInitial,
+      refDate: new Date(synced.debut),
       projectionDate: new Date(),
-      mensualite: credit.mensualite,
+      mensualite: synced.mensualite,
     });
     return {
-      ...credit,
-      mensualite: credit.mensualite,
+      ...synced,
+      mensualite: synced.mensualite,
       capitalRestant,
-      finCredit: credit.finCredit ?? null,
+      finCredit: synced.finCredit ?? null,
     };
   }
 
   return {
-    ...credit,
-    mensualite: credit.mensualite ?? 0,
-    capitalRestant: credit.capitalRestant ?? 0,
-    finCredit: credit.finCredit ?? null,
+    ...synced,
+    mensualite: synced.mensualite ?? 0,
+    capitalRestant: synced.capitalRestant ?? 0,
+    finCredit: synced.finCredit ?? null,
   };
+}
+
+/**
+ * Met à jour un champ crédit en gardant début / fin / durée cohérents.
+ * - début + fin → durée auto
+ * - début + durée → fin auto
+ */
+export function patchCreditField<T extends {
+  banque: string;
+  montantInitial: number;
+  taux: number;
+  duree: number;
+  debut: string;
+  assuranceMensuelle?: number;
+  mensualite?: number;
+  capitalRestant?: number;
+  finCredit?: string | null;
+}>(credit: T, key: keyof T | string, value: string | number): T {
+  const next = { ...credit, [key]: value } as T;
+
+  if (key === "debut" || key === "finCredit") {
+    const debut = String(next.debut || "");
+    const fin = (next.finCredit as string | null | undefined) || "";
+    if (debut && fin) {
+      next.duree = dureeFromDebutFin(debut, fin) as T["duree"];
+    } else if (key === "debut" && debut && next.duree) {
+      next.finCredit = finFromDebutDuree(debut, Number(next.duree)) as T["finCredit"];
+    }
+  } else if (key === "duree") {
+    const debut = String(next.debut || "");
+    const duree = Number(value) || 0;
+    if (debut && duree > 0) {
+      next.finCredit = finFromDebutDuree(debut, duree) as T["finCredit"];
+    }
+  }
+
+  return enrichCredit(next as typeof credit) as T;
 }
