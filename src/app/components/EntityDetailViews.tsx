@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mail, MapPin, Pencil, Phone, Shield, AlertTriangle, Trash2 } from "lucide-react";
 import { formatBailDate, leaseProgressPct } from "@/lib/bailDates";
 import { formatCreationDisplay } from "@/lib/creationDate";
+import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { computePortfolioYield, computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricLabel } from "./MetricWithFormula";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, metricsGridPage, tableScroll, mobileDetailCard, G, lbl } from "./layout";
@@ -40,7 +41,7 @@ function FullPageCrudActions({ onEdit, onDelete }: { onEdit?: () => void; onDele
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 
 export function cashFlow(p: Property) {
-  return Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - p.assurance / 12);
+  return cashFlowMensuel(p, true);
 }
 
 function leasePct(t: Tenant) {
@@ -110,7 +111,10 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
   const cf = props.reduce((s, p) => s + cashFlow(p), 0);
   const loyers = props.reduce((s, p) => s + p.loyer, 0);
   const crd = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
-  const chargesAnnuelles = props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
+  const chargesAnnuelles = props.reduce(
+    (s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12,
+    0,
+  );
   const yieldPct = computePortfolioYield({
     loyersAnnuels: loyers * 12,
     chargesAnnuelles,
@@ -206,7 +210,13 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
                     onClick={() => onSelectProperty?.(p.id)}
                     className={`border-b border-[var(--v-border-subtle)] ${onSelectProperty ? "cursor-pointer hover:vision-surface" : ""}`}
                   >
-                    <td className="py-3 px-3"><p className="font-medium vision-text">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p></td>
+                    <td className="py-3 px-3">
+                      <p className="font-medium vision-text">{p.address}</p>
+                      <p className="text-xs vision-text-muted">{p.ville}</p>
+                      <p className="text-[10px] mt-1 vision-text-muted">
+                        {p.gestionDeleguee ? `Déléguée · ${p.honorairesGestionPct ?? 0} %` : "Directe"}
+                      </p>
+                    </td>
                     <td className="py-3 px-3 vision-text-muted">{p.type} · {p.surface}m²</td>
                     <td className="py-3 px-3 font-mono vision-info-text">{fmt(p.valeurActuelle)}</td>
                     <td className="py-3 px-3 font-mono">{p.loyer > 0 ? fmt(p.loyer) : "—"}</td>
@@ -226,6 +236,9 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
               <button key={p.id} type="button" onClick={() => onSelectProperty?.(p.id)} className={mobileDetailCard}>
                 <p className="text-sm font-semibold vision-text break-words">{p.address}</p>
                 <p className="text-xs vision-text-muted mt-0.5">{p.type} · {p.surface}m² · {p.ville}</p>
+                <p className="text-[10px] vision-text-muted mt-0.5">
+                  {p.gestionDeleguee ? `Gestion déléguée · ${p.honorairesGestionPct ?? 0} %` : "Gestion directe"}
+                </p>
                 <div className="grid grid-cols-2 gap-2 mt-3 text-xs sm:text-sm">
                   <div><span className="vision-text-muted">Valeur</span><p className="font-mono font-semibold vision-info-text mt-0.5">{fmt(p.valeurActuelle)}</p></div>
                   <div><span className="vision-text-muted">Loyer</span><p className="font-mono vision-text mt-0.5">{p.loyer > 0 ? fmt(p.loyer) : "—"}</p></div>

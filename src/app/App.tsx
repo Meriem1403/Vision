@@ -5,6 +5,7 @@ import { toast, Toaster } from "sonner";
 import { formatBailDate, leaseProgressPct, syncTenantBailTs } from "@/lib/bailDates";
 import { creationToInputValue, formatCreationDisplay } from "@/lib/creationDate";
 import { computeLoanSummary, enrichCredit, patchCreditField } from "@/lib/loanCalculator";
+import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { computePortfolioYield, formatYieldPct } from "@/lib/propertyYield";
 import { api, isApiAvailable } from "@/lib/api";
 import {
@@ -79,7 +80,7 @@ import {
 
 interface Associe { name: string; parts: number }
 interface Credit { banque: string; montantInitial: number; taux: number; duree: number; debut: string; assuranceMensuelle?: number; mensualite: number; capitalRestant: number; finCredit?: string | null }
-interface Property { id: string; sciId: string; address: string; ville: string; cp: string; type: string; surface: number; lots: number; prixAchat: number; travaux: number; fraisNotaire: number; valeurActuelle: number; loyer: number; taxeFonciere: number; assurance: number; credit?: Credit }
+interface Property { id: string; sciId: string; address: string; ville: string; cp: string; type: string; surface: number; lots: number; prixAchat: number; travaux: number; fraisNotaire: number; valeurActuelle: number; loyer: number; taxeFonciere: number; assurance: number; gestionDeleguee?: boolean; honorairesGestionPct?: number; credit?: Credit }
 interface SCI { id: string; name: string; shortName: string; type: "IR" | "IS" | "RP"; creation: string; valeurEstimee: number; associes: Associe[]; color: string; gradient: string }
 interface Tenant { id: string; propertyId: string; nom: string; initiales: string; tel: string; email: string; debutBail: string; finBail: string; debutTs: number; finTs: number; loyer: number; charges: number; statut: "En cours" | "Impayé" | "Terminé" }
 interface AlertItem { id: string; type: "bail" | "credit" | "taxe" | "assurance" | "info"; title: string; detail: string; severity: "high" | "medium" | "low" }
@@ -133,7 +134,7 @@ const PATRIMOINE_DATA = [
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 const uid = () => `id_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-const cashFlow = (p: Property) => Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12);
+const cashFlow = (p: Property) => cashFlowMensuel(p, false);
 const finCredit = (c: Credit) => {
   if (c.finCredit) {
     const d = new Date(c.finCredit);
@@ -447,7 +448,10 @@ function DashboardView({
   const totalBrut = scopeScis.reduce((s, x) => s + x.valeurEstimee, 0);
   const totalDette = scopeProperties.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
   const loyers = scopeProperties.reduce((s, p) => s + p.loyer * 12, 0);
-  const chargesAnnuelles = scopeProperties.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
+  const chargesAnnuelles = scopeProperties.reduce(
+    (s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12,
+    0,
+  );
   const cf = scopeProperties.reduce((s, p) => s + cashFlow(p), 0);
   const yieldPct = computePortfolioYield({ loyersAnnuels: loyers, chargesAnnuelles, patrimoineBrut: totalBrut });
 
@@ -460,7 +464,10 @@ function DashboardView({
           const mens = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0), 0);
           const cash = props.reduce((s, p) => s + cashFlow(p), 0);
           const loy = props.reduce((s, p) => s + p.loyer * 12, 0);
-          const charges = props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
+          const charges = props.reduce(
+            (s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12,
+            0,
+          );
           acc.brut += sci.valeurEstimee * ratio;
           acc.dette += dette * ratio;
           acc.mensualites += mens * ratio;
@@ -626,10 +633,10 @@ const PTYPES = ["T1", "T2", "T3", "T4", "Maison", "Immeuble", "Local commercial"
 
 function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDelete }: { property: Property | null; scis: SCI[]; existingBanks?: string[]; onSave: (p: Property) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!property;
-  const [f, setF] = useState<Property>(property ?? { id: uid(), sciId: scis[0]?.id ?? "", address: "", ville: "", cp: "", type: "T2", surface: 0, lots: 1, prixAchat: 0, travaux: 0, fraisNotaire: 0, valeurActuelle: 0, loyer: 0, taxeFonciere: 0, assurance: 0 });
+  const [f, setF] = useState<Property>(property ?? { id: uid(), sciId: scis[0]?.id ?? "", address: "", ville: "", cp: "", type: "T2", surface: 0, lots: 1, prixAchat: 0, travaux: 0, fraisNotaire: 0, valeurActuelle: 0, loyer: 0, taxeFonciere: 0, assurance: 0, gestionDeleguee: false, honorairesGestionPct: 0 });
   const [hasCredit, setHasCredit] = useState(!!property?.credit);
   const [cred, setCred] = useState<Credit>(property?.credit ?? { banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
-  const upd = (k: keyof Property, v: string | number) => setF((p) => ({ ...p, [k]: v }));
+  const upd = (k: keyof Property, v: string | number | boolean) => setF((p) => ({ ...p, [k]: v }));
   const updC = (k: keyof Credit, v: string | number) => setCred((c) => patchCreditField(c, k, v));
   const applyTamImport = (r: TamImportResult) => {
     setHasCredit(true);
@@ -695,6 +702,47 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
           <GI label="Assurance/an (€)" type="number" value={f.assurance || ""} onChange={(e) => upd("assurance", +e.target.value)} className="sm:col-span-2" />
         </div>
       </GSec>
+      <div className={`${G} p-5`}>
+        <label className="flex items-center gap-3 cursor-pointer mb-1">
+          <div
+            className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors duration-200 ${f.gestionDeleguee ? "bg-blue-500/70" : "vision-surface-strong"}`}
+            onClick={() => upd("gestionDeleguee", !f.gestionDeleguee)}
+          >
+            <motion.div animate={{ x: f.gestionDeleguee ? 22 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }} className="w-4 h-4 bg-white rounded-full absolute top-1 shadow" />
+          </div>
+          <div>
+            <span className="text-sm font-semibold vision-text">Gestion locative déléguée</span>
+            <p className="text-xs vision-text-muted mt-0.5">
+              {f.gestionDeleguee ? "Cabinet de gestion" : "Gestion directe"}
+            </p>
+          </div>
+        </label>
+        <AnimatePresence initial={false}>
+          {f.gestionDeleguee && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease }}
+              className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3"
+            >
+              <GI
+                label="Honoraires de gestion (% du loyer)"
+                type="number"
+                step="0.1"
+                value={f.honorairesGestionPct || ""}
+                onChange={(e) => upd("honorairesGestionPct", +e.target.value)}
+              />
+              <div className="flex flex-col justify-end">
+                <p className="text-xs vision-text-muted mb-1">Coût mensuel estimé</p>
+                <p className="text-sm font-mono font-semibold vision-text">
+                  {new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(honorairesGestionMensuel(f))}
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
       <div className={`${G} p-5`}>
         <label className="flex items-center gap-3 cursor-pointer mb-4">
           <div className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors duration-200 ${hasCredit ? "bg-blue-500/70" : "vision-surface-strong"}`} onClick={() => setHasCredit(!hasCredit)}>

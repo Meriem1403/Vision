@@ -1,16 +1,20 @@
 /** Indicateurs de rendement locatif (base valeur de marché). */
 
+import { honorairesGestionMensuel } from "@/lib/propertyFinance";
+
 export interface YieldInput {
   loyer: number;
   valeurActuelle: number;
   taxeFonciere?: number;
   assurance?: number;
+  gestionDeleguee?: boolean;
+  honorairesGestionPct?: number;
 }
 
 export interface PropertyYield {
   /** (Loyer × 12 ÷ valeur) × 100 */
   brut: number | null;
-  /** ((Loyer × 12 − taxe − assurance) ÷ valeur) × 100 */
+  /** ((Loyer × 12 − taxe − assurance − honoraires) ÷ valeur) × 100 */
   net: number | null;
   loyersAnnuels: number;
   chargesAnnuelles: number;
@@ -23,7 +27,8 @@ function round2(n: number): number {
 
 export function computePropertyYield(input: YieldInput): PropertyYield {
   const loyersAnnuels = (input.loyer || 0) * 12;
-  const chargesAnnuelles = (input.taxeFonciere || 0) + (input.assurance || 0);
+  const honorairesAnnuels = honorairesGestionMensuel(input) * 12;
+  const chargesAnnuelles = (input.taxeFonciere || 0) + (input.assurance || 0) + honorairesAnnuels;
   const revenusNetsAnnuels = loyersAnnuels - chargesAnnuelles;
   const valeur = input.valeurActuelle || 0;
 

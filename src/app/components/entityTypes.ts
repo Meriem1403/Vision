@@ -27,6 +27,10 @@ export interface Property {
   loyer: number;
   taxeFonciere: number;
   assurance: number;
+  /** true = cabinet de gestion ; false = gestion directe */
+  gestionDeleguee?: boolean;
+  /** Honoraires en % du loyer mensuel (ignoré si gestion directe) */
+  honorairesGestionPct?: number;
   credit?: Credit;
 }
 

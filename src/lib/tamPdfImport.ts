@@ -146,7 +146,8 @@ function inferDebut(opts: {
   const baseElapsed = Math.max(0, opts.duree - opts.remaining);
   let best = { debut: toISODate(addMonths(firstMonth, -baseElapsed)), crd: 0, err: Infinity };
 
-  for (let delta = -6; delta <= 6; delta++) {
+  // Fenêtre large : remboursements anticipés / décalages de date d’échéance
+  for (let delta = -36; delta <= 36; delta++) {
     const debutDate = addMonths(firstMonth, -(baseElapsed + delta));
     const debut = toISODate(debutDate);
     const crd = getCrdAtDate(
@@ -163,6 +164,41 @@ function inferDebut(opts: {
     if (err < 0.02) break;
   }
   return best;
+}
+
+/**
+ * Prêt remanié / restructuré : la mensualité ne correspond plus au capital initial.
+ * On ancre alors le calcul sur l’encours + le reste à courir (cohérent avec le TAM à venir).
+ */
+function inferRemainingLoan(opts: {
+  encours: number;
+  taux: number;
+  mensualite: number;
+  firstEcheance: Date;
+  scheduleLen: number;
+}): { montantInitial: number; duree: number; debut: string; mensErr: number } {
+  const firstMonth = new Date(opts.firstEcheance.getFullYear(), opts.firstEcheance.getMonth(), 1);
+  const fromMens = inferDureeFromMensualite(opts.encours, opts.taux, opts.mensualite);
+  // Préférer la durée du PDF si elle reproduit la mensualité aussi bien
+  const candidates = [opts.scheduleLen, fromMens].filter((n) => n > 0);
+  let best = { n: fromMens || opts.scheduleLen, d: Infinity };
+  for (const n of candidates) {
+    const m = round2(computeMonthlyPaymentExact(opts.encours, opts.taux, n));
+    const d = Math.abs(m - opts.mensualite);
+    if (d < best.d) best = { n, d };
+  }
+  // Affiner autour du meilleur candidat
+  for (let n = Math.max(1, best.n - 6); n <= best.n + 6; n++) {
+    const m = round2(computeMonthlyPaymentExact(opts.encours, opts.taux, n));
+    const d = Math.abs(m - opts.mensualite);
+    if (d < best.d) best = { n, d };
+  }
+  return {
+    montantInitial: round2(opts.encours),
+    duree: best.n,
+    debut: toISODate(firstMonth),
+    mensErr: best.d,
+  };
 }
 
 export async function extractPdfText(file: File | ArrayBuffer): Promise<string> {
@@ -230,34 +266,69 @@ export function parseTamText(text: string, existingBanks: string[] = []): TamImp
   }
 
   const encoursRef = encours ?? first.capitalDu;
-  const duree = inferDureeFromMensualite(montantInitial, taux, mensualite);
+  let duree = inferDureeFromMensualite(montantInitial, taux, mensualite);
   if (!duree) throw new Error("Impossible d’inférer la durée à partir de la mensualité.");
 
   const remaining = schedule.length;
-  if (remaining > duree) {
-    warnings.push("Le PDF semble contenir plus d’échéances que la durée inférée — vérifiez les champs.");
+  const mensFromCapital = round2(computeMonthlyPaymentExact(montantInitial, taux, duree));
+  const mensMismatch = Math.abs(mensFromCapital - mensualite);
+
+  let debut = "";
+  let montantOut = round2(montantInitial);
+  let remodeled = false;
+
+  // Si la mensualité ne peut pas provenir du capital initial (prêt remanié),
+  // ou si le CRD ne colle pas → ancrage sur encours + reste à courir.
+  if (mensMismatch > 1) {
+    remodeled = true;
+  } else {
+    const inferred = inferDebut({
+      montantInitial,
+      taux,
+      duree,
+      encours: encoursRef,
+      firstEcheance: first.date,
+      remaining: Math.min(remaining, duree),
+    });
+    debut = inferred.debut;
+    if (inferred.err > 500) {
+      // Gros écart → prêt remanié / capital initial non exploitable
+      remodeled = true;
+      warnings.push(
+        `Écart CRD ${round2(inferred.err).toLocaleString("fr-FR")} € — bascule sur encours / reste à courir.`,
+      );
+    } else if (inferred.err > 1) {
+      warnings.push(
+        `Écart CRD ${round2(inferred.err).toLocaleString("fr-FR")} € entre le PDF et le calcul (toléré).`,
+      );
+    }
   }
 
-  const inferred = inferDebut({
-    montantInitial,
-    taux,
-    duree,
-    encours: encoursRef,
-    firstEcheance: first.date,
-    remaining: Math.min(remaining, duree),
-  });
-
-  if (inferred.err > 1) {
+  if (remodeled) {
+    const rem = inferRemainingLoan({
+      encours: encoursRef,
+      taux,
+      mensualite,
+      firstEcheance: first.date,
+      scheduleLen: remaining,
+    });
     warnings.push(
-      `Écart CRD ${round2(inferred.err).toLocaleString("fr-FR")} € entre le PDF et le calcul — contrôlez la date de début.`,
+      `Prêt remanié : crédit accordé ${round2(montantInitial).toLocaleString("fr-FR")} € — paramètres ancrés sur l’encours (${round2(encoursRef).toLocaleString("fr-FR")} €) et ${rem.duree} mois restants.`,
     );
+    montantOut = rem.montantInitial;
+    duree = rem.duree;
+    debut = rem.debut;
+  }
+
+  if (remaining > duree && !remodeled) {
+    warnings.push("Le PDF semble contenir plus d’échéances que la durée inférée — vérifiez les champs.");
   }
 
   const banque = detectBanque(text, existingBanks);
   if (!banque) warnings.push("Banque non détectée — à renseigner manuellement.");
 
   // Fin = début + durée (pas la dernière ligne du PDF partiel, sinon durée/mensualité faussées)
-  const finCredit = finFromDebutDuree(inferred.debut, duree) ?? toISODate(new Date(last.date.getFullYear(), last.date.getMonth(), 1));
+  const finCredit = finFromDebutDuree(debut, duree) ?? toISODate(new Date(last.date.getFullYear(), last.date.getMonth(), 1));
 
   const lastPdfMonth = toISODate(new Date(last.date.getFullYear(), last.date.getMonth(), 1));
   if (finCredit.slice(0, 7) !== lastPdfMonth.slice(0, 7)) {
@@ -272,10 +343,10 @@ export function parseTamText(text: string, existingBanks: string[] = []): TamImp
 
   return {
     banque,
-    montantInitial: round2(montantInitial),
+    montantInitial: montantOut,
     taux: round2(taux * 100) / 100,
     duree,
-    debut: inferred.debut,
+    debut,
     finCredit,
     assuranceMensuelle,
     mensualite,
