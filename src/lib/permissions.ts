@@ -99,7 +99,8 @@ export function filterPropertiesWithCredit(user: AuthUser, properties: Property[
 
 export function associeShareRatio(sci: SCI, shareholderName: string) {
   const total = sci.associes.reduce((s, a) => s + a.parts, 0);
-  const mine = sci.associes.find((a) => a.name === shareholderName)?.parts ?? 0;
+  const key = normalizePerson(shareholderName);
+  const mine = sci.associes.find((a) => normalizePerson(a.name) === key)?.parts ?? 0;
   return total > 0 ? mine / total : 0;
 }
 
