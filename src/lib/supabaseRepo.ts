@@ -238,6 +238,215 @@ export async function fetchPortfolio(): Promise<{
   return { scis, properties, tenants, alerts };
 }
 
+function slugify(value: string) {
+  const s = value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s || crypto.randomUUID();
+}
+
+async function entityIdBySlug(slug: string): Promise<string> {
+  const client = requireClient();
+  const { data, error } = await client.from("legal_entities").select("id").eq("slug", slug).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.id) throw new Error(`Entité introuvable (${slug})`);
+  return data.id as string;
+}
+
+function isUuid(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
+
+/** Persiste une SCI (+ associés). `sci.id` = slug côté app. */
+export async function upsertSci(sci: SciRow): Promise<SciRow> {
+  const client = requireClient();
+  const slug = sci.id?.startsWith("id_") || !sci.id ? slugify(sci.shortName || sci.name) : sci.id;
+
+  const { data: existing, error: findErr } = await client
+    .from("legal_entities")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (findErr) throw new Error(findErr.message);
+
+  const row = {
+    slug,
+    name: sci.name,
+    short_name: sci.shortName,
+    type: sci.type,
+    creation: sci.creation || null,
+    valeur_estimee: sci.valeurEstimee,
+    color: sci.color,
+    gradient: sci.gradient || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  let entityId = existing?.id as string | undefined;
+  if (entityId) {
+    const { error } = await client.from("legal_entities").update(row).eq("id", entityId);
+    if (error) throw new Error(error.message);
+    const { error: delSh } = await client.from("shareholders").delete().eq("entity_id", entityId);
+    if (delSh) throw new Error(delSh.message);
+  } else {
+    const { data, error } = await client.from("legal_entities").insert(row).select("id").single();
+    if (error || !data) throw new Error(error?.message ?? "Création SCI impossible");
+    entityId = data.id as string;
+  }
+
+  if (sci.associes.length) {
+    const { error } = await client.from("shareholders").insert(
+      sci.associes.map((a) => ({
+        entity_id: entityId,
+        name: a.name,
+        parts: a.parts,
+      })),
+    );
+    if (error) throw new Error(error.message);
+  }
+
+  return { ...sci, id: slug };
+}
+
+export async function deleteSci(slug: string) {
+  const client = requireClient();
+  const entityId = await entityIdBySlug(slug);
+  const { error } = await client.from("legal_entities").delete().eq("id", entityId);
+  if (error) throw new Error(error.message);
+}
+
+/** Persiste un bien + crédit éventuel. Retourne l’id UUID Postgres. */
+export async function upsertProperty(property: PropertyRow): Promise<PropertyRow> {
+  const client = requireClient();
+  const entityId = await entityIdBySlug(property.sciId);
+
+  const row = {
+    entity_id: entityId,
+    address: property.address,
+    ville: property.ville,
+    cp: property.cp,
+    type: property.type,
+    surface: property.surface,
+    lots: property.lots,
+    prix_achat: property.prixAchat,
+    travaux: property.travaux,
+    frais_notaire: property.fraisNotaire,
+    valeur_actuelle: property.valeurActuelle,
+    loyer: property.loyer,
+    taxe_fonciere: property.taxeFonciere,
+    assurance: property.assurance,
+    updated_at: new Date().toISOString(),
+  };
+
+  let propertyId = property.id;
+  const canReuseId = isUuid(property.id);
+
+  if (canReuseId) {
+    const { data: existing } = await client.from("properties").select("id").eq("id", property.id).maybeSingle();
+    if (existing) {
+      const { error } = await client.from("properties").update(row).eq("id", property.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { data, error } = await client.from("properties").insert({ id: property.id, ...row }).select("id").single();
+      if (error || !data) throw new Error(error?.message ?? "Création bien impossible");
+      propertyId = data.id as string;
+    }
+  } else {
+    const { data, error } = await client.from("properties").insert(row).select("id").single();
+    if (error || !data) throw new Error(error?.message ?? "Création bien impossible");
+    propertyId = data.id as string;
+  }
+
+  if (property.credit) {
+    const loanRow = {
+      property_id: propertyId,
+      banque: property.credit.banque || "À préciser",
+      montant_initial: property.credit.montantInitial,
+      taux_annuel: property.credit.taux,
+      duree_mois: property.credit.duree,
+      date_debut: property.credit.debut || null,
+      assurance_mensuelle: property.credit.assuranceMensuelle ?? 0,
+      mensualite: property.credit.mensualite,
+      capital_restant: property.credit.capitalRestant,
+      fin_credit: property.credit.finCredit || null,
+      amortization_model: property.credit.taux > 0 ? "RATE_BASED" : "EXCEL_FLAT",
+      updated_at: new Date().toISOString(),
+    };
+    const { data: existingLoan } = await client
+      .from("loans")
+      .select("id")
+      .eq("property_id", propertyId)
+      .maybeSingle();
+    if (existingLoan) {
+      const { error } = await client.from("loans").update(loanRow).eq("property_id", propertyId);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await client.from("loans").insert(loanRow);
+      if (error) throw new Error(error.message);
+    }
+  } else {
+    const { error } = await client.from("loans").delete().eq("property_id", propertyId);
+    if (error) throw new Error(error.message);
+  }
+
+  return { ...property, id: propertyId };
+}
+
+export async function deleteProperty(id: string) {
+  const client = requireClient();
+  const { error } = await client.from("properties").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function upsertTenant(tenant: TenantRow): Promise<TenantRow> {
+  const client = requireClient();
+  const row = {
+    property_id: tenant.propertyId,
+    nom: tenant.nom,
+    initiales: tenant.initiales,
+    tel: tenant.tel || null,
+    email: tenant.email || null,
+    debut_bail: tenant.debutBail,
+    fin_bail: tenant.finBail,
+    debut_ts: tenant.debutTs,
+    fin_ts: tenant.finTs,
+    loyer: tenant.loyer,
+    charges: tenant.charges,
+    statut: tenant.statut,
+  };
+
+  if (isUuid(tenant.id)) {
+    const { data: existing } = await client.from("tenants").select("id").eq("id", tenant.id).maybeSingle();
+    if (existing) {
+      const { error } = await client.from("tenants").update(row).eq("id", tenant.id);
+      if (error) throw new Error(error.message);
+      return tenant;
+    }
+    const { data, error } = await client.from("tenants").insert({ id: tenant.id, ...row }).select("id").single();
+    if (error || !data) throw new Error(error?.message ?? "Création locataire impossible");
+    return { ...tenant, id: data.id as string };
+  }
+
+  const { data, error } = await client.from("tenants").insert(row).select("id").single();
+  if (error || !data) throw new Error(error?.message ?? "Création locataire impossible");
+  return { ...tenant, id: data.id as string };
+}
+
+export async function deleteTenant(id: string) {
+  const client = requireClient();
+  const { error } = await client.from("tenants").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteAlert(id: string) {
+  const client = requireClient();
+  const { error } = await client.from("alerts").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 export async function fetchDossiers() {
   const client = requireClient();
   const { data, error } = await client
