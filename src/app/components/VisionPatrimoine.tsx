@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { getCrdAtDate, hasRateBasedAmortization, monthsBetween, projectFlatCrd } from "@/lib/loanCalculator";
-import { pageWrap, pageEndSpacer, G, lbl } from "./layout";
+import { pageWrap, pageEndSpacer, G } from "./layout";
 import { GSelect, monthOptions, buildYearOptions } from "./GSelect";
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
@@ -318,12 +318,6 @@ export function VisionPatrimoinePanel({ scis, properties, onSelectProperty, shar
 }) {
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
-      <div className={`${G} px-4 sm:px-6 py-4`}>
-        <p className={lbl}>Vision patrimoine</p>
-        <p className="text-xs sm:text-sm vision-text-muted">
-          Projection par SCI{shareholderName ? ` · quote-part ${shareholderName}` : ""} — sélecteurs accessibles, tableau sur grand écran, cartes sur mobile.
-        </p>
-      </div>
       {scis.map((sci) => {
         const props = properties.filter((p) => p.sciId === sci.id);
         if (props.length === 0) return null;

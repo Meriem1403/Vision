@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { toast, Toaster } from "sonner";
+import { formatBailDate, leaseProgressPct, syncTenantBailTs } from "@/lib/bailDates";
+import { creationToInputValue, formatCreationDisplay } from "@/lib/creationDate";
 import { computeLoanSummary, enrichCredit, patchCreditField } from "@/lib/loanCalculator";
 import { computePortfolioYield, formatYieldPct } from "@/lib/propertyYield";
 import { api, isApiAvailable } from "@/lib/api";
@@ -9,7 +11,11 @@ import {
   detailPath, parseAppLocation, readSegment, viewPath, withSearch,
   type PortfolioSegment,
 } from "@/lib/routes";
+import { AddressAutocomplete } from "@/app/components/AddressAutocomplete";
+import { BanqueField } from "@/app/components/BanqueField";
+import { FilterEmpty, FilterSelect, FiltersPanel, SearchBar, matchesSearch } from "@/app/components/ListFilters";
 import { PaginationBar, usePagination } from "@/app/components/Pagination";
+import { resolveBankName } from "@/lib/banks";
 import {
   AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -23,12 +29,12 @@ import {
 } from "lucide-react";
 import { AppDetailDrawer, FullPageDetail, fullPageHeaderTitle, fullPageHeaderSubtitle } from "@/app/components/DetailLayer";
 import type { DetailTarget } from "@/app/detail";
-import { VisionPatrimoinePanel } from "@/app/components/VisionPatrimoine";
 import { LoginPage } from "@/app/components/LoginPage";
 import { BankDossierView } from "@/app/components/BankDossierView";
 import { BankPortalView } from "@/app/components/BankPortalView";
 import { BrandLogo } from "@/app/components/BrandLogo";
 import { ThemeSettings, ThemeSettingsModal } from "@/app/components/ThemeSettings";
+import { VisionPatrimoinePanel } from "@/app/components/VisionPatrimoine";
 import {
   pageWrap, formWrap, cardsGrid, G, GE, inp, lbl, btnP, btnG, btnD, btnS, selectCls,
 } from "@/app/components/layout";
@@ -167,7 +173,7 @@ const FALLBACK_SCI: SCI = {
   associes: [], color: "#60a5fa", gradient: "from-blue-500/20 to-transparent",
 };
 const sciOf = (p: Property, scis: SCI[]) => scis.find((s) => s.id === p.sciId) ?? scis[0] ?? FALLBACK_SCI;
-const leasePct = (t: Tenant) => { const now = Date.now(); if (now >= t.finTs) return 100; if (now <= t.debutTs) return 0; return Math.round(((now - t.debutTs) / (t.finTs - t.debutTs)) * 100); };
+const leasePct = (t: Tenant) => leaseProgressPct(t);
 
 // ─── MOTION ──────────────────────────────────────────────────────────────────
 
@@ -179,6 +185,9 @@ const rowV = { hidden: { opacity: 0, x: -10 }, show: { opacity: 1, x: 0, transit
 const slideV = { hidden: { opacity: 0, height: 0 }, show: { opacity: 1, height: "auto", transition: { duration: 0.28, ease } }, exit: { opacity: 0, height: 0, transition: { duration: 0.18 } } };
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
+
+/** Badge KPI inline (évite w-full de `G` qui empile les cartes). */
+const kpiBadge = "vision-glass backdrop-blur-xl rounded-2xl px-4 py-3 w-auto shrink-0 min-w-0";
 
 function GI({ label, className = "", type, onChange, value, ...p }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; className?: string }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -466,7 +475,7 @@ function DashboardView({
 
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5 lg:space-y-6`}>
-      <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
+      <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4 w-full">
         {kpis.map((k) => (
           <motion.div key={k.l} variants={itemV} whileHover={{ y: -3, scale: 1.02 }} className={`${G} p-4 cursor-default`} style={{ borderColor: `${k.color}1e` }}>
             <div className="flex items-center justify-between mb-3 gap-2">
@@ -488,7 +497,7 @@ function DashboardView({
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 w-full">
             {personalKpis.map((k) => (
               <div key={k.l} className="vision-surface rounded-xl p-3" style={{ border: `1px solid ${k.color}22` }}>
                 <div className="flex items-center justify-between mb-2 gap-2">
@@ -570,7 +579,12 @@ function DashboardView({
         })}
       </motion.div>
 
-      <VisionPatrimoinePanel scis={scis} properties={properties} onSelectProperty={onSelectProperty} shareholderName={shareName} />
+      <VisionPatrimoinePanel
+        scis={scis}
+        properties={properties}
+        onSelectProperty={onSelectProperty}
+        shareholderName={shareName}
+      />
     </div>
   );
 }
@@ -579,7 +593,7 @@ function DashboardView({
 
 const PTYPES = ["T1", "T2", "T3", "T4", "Maison", "Immeuble", "Local commercial"];
 
-function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: Property | null; scis: SCI[]; onSave: (p: Property) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
+function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDelete }: { property: Property | null; scis: SCI[]; existingBanks?: string[]; onSave: (p: Property) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!property;
   const [f, setF] = useState<Property>(property ?? { id: uid(), sciId: scis[0]?.id ?? "", address: "", ville: "", cp: "", type: "T2", surface: 0, lots: 1, prixAchat: 0, travaux: 0, fraisNotaire: 0, valeurActuelle: 0, loyer: 0, taxeFonciere: 0, assurance: 0 });
   const [hasCredit, setHasCredit] = useState(!!property?.credit);
@@ -590,7 +604,18 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
   const sci = scis.find((s) => s.id === f.sciId);
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
-      <FormHdr title={isEdit ? `Modifier · ${f.address}` : "Nouveau bien"} onBack={onBack} onDelete={onDelete} onSave={() => onSave({ ...f, credit: hasCredit ? enrichedCred : undefined })} isEdit={isEdit} />
+      <FormHdr
+        title={isEdit ? `Modifier · ${f.address}` : "Nouveau bien"}
+        onBack={onBack}
+        onDelete={onDelete}
+        onSave={() => onSave({
+          ...f,
+          credit: hasCredit
+            ? { ...enrichedCred, banque: resolveBankName(enrichedCred.banque, existingBanks) }
+            : undefined,
+        })}
+        isEdit={isEdit}
+      />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5 w-full">
       <GSec title="Entité propriétaire">
         <div className="grid grid-cols-2 gap-2">
@@ -603,10 +628,10 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
         </div>
       </GSec>
       <GSec title="Localisation">
-        <div className="space-y-3">
-          <GI label="Adresse" placeholder="14 Rue de la Paix" value={f.address} onChange={(e) => upd("address", e.target.value)} />
-          <div className="grid grid-cols-3 gap-3"><GI label="Code postal" placeholder="75001" value={f.cp} onChange={(e) => upd("cp", e.target.value)} /><GI label="Ville" placeholder="Paris" className="col-span-2" value={f.ville} onChange={(e) => upd("ville", e.target.value)} /></div>
-        </div>
+        <AddressAutocomplete
+          value={{ address: f.address, cp: f.cp, ville: f.ville }}
+          onChange={(loc) => setF((p) => ({ ...p, address: loc.address, cp: loc.cp, ville: loc.ville }))}
+        />
       </GSec>
       <GSec title="Type & Caractéristiques">
         <div className="flex flex-wrap gap-2 mb-4">{PTYPES.map((t) => <motion.button key={t} whileTap={{ scale: 0.94 }} onClick={() => upd("type", t)} className="px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all" style={f.type === t ? { borderColor: sci?.color, backgroundColor: `${sci?.color}18`, color: sci?.color } : { borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.38)" }}>{t}</motion.button>)}</div>
@@ -630,12 +655,17 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
           </div>
           <span className="text-sm font-semibold vision-text">Crédit immobilier</span>
         </label>
-        <AnimatePresence>
+        <AnimatePresence initial={false}>
           {hasCredit && (
-            <motion.div variants={slideV} initial="hidden" animate="show" exit="exit" className="overflow-hidden">
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease }}
+            >
               <p className="text-xs vision-text-muted mb-3">Montant, taux, date de début et date de fin — la durée et les mensualités se calculent automatiquement.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <GI label="Banque" value={cred.banque} onChange={(e) => updC("banque", e.target.value)} className="sm:col-span-2" />
+                <BanqueField value={cred.banque} onChange={(b) => updC("banque", b)} existingBanks={existingBanks} className="sm:col-span-2" />
                 <GI label="Montant emprunté (€)" type="number" value={cred.montantInitial || ""} onChange={(e) => updC("montantInitial", +e.target.value)} />
                 <GI label="Taux annuel (%)" type="number" step="0.01" value={cred.taux || ""} onChange={(e) => updC("taux", +e.target.value)} />
                 <GI label="Date de début" type="date" value={cred.debut} onChange={(e) => updC("debut", e.target.value)} />
@@ -659,15 +689,39 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<Property | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [filterSci, setFilterSci] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [filterCredit, setFilterCredit] = useState<"all" | "with" | "without">("all");
+  const [filterCash, setFilterCash] = useState<"all" | "pos" | "neg">("all");
   const [display, setDisplay] = useState<"grid" | "table">("grid");
-  const filtered = properties.filter((p) => filterSci === "all" || p.sciId === filterSci);
-  const paging = usePagination(filtered, `${filterSci}-${filtered.length}`);
+  const types = useMemo(() => [...new Set(properties.map((p) => p.type).filter(Boolean))].sort(), [properties]);
+  const filtered = useMemo(() => properties.filter((p) => {
+    if (filterSci !== "all" && p.sciId !== filterSci) return false;
+    if (filterType !== "all" && p.type !== filterType) return false;
+    if (filterCredit === "with" && !p.credit) return false;
+    if (filterCredit === "without" && p.credit) return false;
+    const cf = cashFlow(p);
+    if (filterCash === "pos" && cf < 0) return false;
+    if (filterCash === "neg" && cf >= 0) return false;
+    const sci = sciOf(p, scis);
+    return matchesSearch(query, p.address, p.ville, p.cp, p.type, sci.shortName, sci.name, p.credit?.banque);
+  }), [properties, scis, filterSci, filterType, filterCredit, filterCash, query]);
+  const paging = usePagination(filtered, `${filterSci}-${filterType}-${filterCredit}-${filterCash}-${query}-${filtered.length}`);
+  const filtersActive = query !== "" || filterSci !== "all" || filterType !== "all" || filterCredit !== "all" || filterCash !== "all";
+  const resetFilters = () => {
+    setQuery("");
+    setFilterSci("all");
+    setFilterType("all");
+    setFilterCredit("all");
+    setFilterCash("all");
+  };
   if (mode !== "list") {
     return (
       <PropertyForm
         property={editing}
         scis={scis}
+        existingBanks={properties.map((p) => p.credit?.banque).filter((b): b is string => Boolean(b))}
         onBack={() => { setMode("list"); setEditing(null); }}
         onSave={async (p) => {
           if (mode === "create") await onAdd(p);
@@ -682,22 +736,67 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
 
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <button onClick={() => setFilterSci("all")} className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${filterSci === "all" ? "vision-chip-active border-[var(--v-glass-border)]" : "vision-text-muted border-[var(--v-border-subtle)] hover:vision-surface"}`}>Tous ({properties.length})</button>
-          {scis.map((s) => <button key={s.id} onClick={() => setFilterSci(s.id)} className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${filterSci === s.id ? "" : "vision-chip-idle"}`} style={filterSci === s.id ? { backgroundColor: `${s.color}20`, color: s.color, borderColor: `${s.color}45` } : undefined}>{s.shortName}</button>)}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+        <SearchBar value={query} onChange={setQuery} placeholder="Rechercher une adresse, ville, type, banque…" className="sm:flex-1" />
+        <div className="flex items-center gap-2 sm:ml-auto shrink-0">
           <div className={`${G} flex p-1`}>
-            <button onClick={() => setDisplay("grid")} className={`p-2 rounded-xl transition-all ${display === "grid" ? "vision-chip-active" : "vision-text-muted hover:vision-text-muted"}`}><LayoutGrid size={14} /></button>
-            <button onClick={() => setDisplay("table")} className={`p-2 rounded-xl transition-all ${display === "table" ? "vision-chip-active" : "vision-text-muted hover:vision-text-muted"}`}><List size={14} /></button>
+            <button type="button" onClick={() => setDisplay("grid")} className={`p-2 rounded-xl transition-all ${display === "grid" ? "vision-chip-active" : "vision-text-muted hover:vision-text-muted"}`}><LayoutGrid size={14} /></button>
+            <button type="button" onClick={() => setDisplay("table")} className={`p-2 rounded-xl transition-all ${display === "table" ? "vision-chip-active" : "vision-text-muted hover:vision-text-muted"}`}><List size={14} /></button>
           </div>
-          <button onClick={() => { setEditing(null); setMode("create"); }} className={btnP}><Plus size={14} /><span className="hidden sm:inline">Nouveau bien</span></button>
+          <button type="button" onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} whitespace-nowrap shrink-0`}><Plus size={14} className="shrink-0" /><span className="whitespace-nowrap">Nouveau bien</span></button>
         </div>
       </div>
+      <FiltersPanel onReset={resetFilters} resetVisible={filtersActive}>
+            <FilterSelect
+              label="Entité"
+              value={filterSci}
+              onChange={setFilterSci}
+              options={[
+                { value: "all", label: `Toutes (${properties.length})` },
+                ...scis.map((s) => ({
+                  value: s.id,
+                  label: `${s.shortName} (${properties.filter((p) => p.sciId === s.id).length})`,
+                })),
+              ]}
+            />
+            <FilterSelect
+              label="Type"
+              value={filterType}
+              onChange={setFilterType}
+              options={[
+                { value: "all", label: "Tous types" },
+                ...types.map((t) => ({
+                  value: t,
+                  label: `${t} (${properties.filter((p) => p.type === t).length})`,
+                })),
+              ]}
+            />
+            <FilterSelect
+              label="Crédit"
+              value={filterCredit}
+              onChange={(v) => setFilterCredit(v as "all" | "with" | "without")}
+              options={[
+                { value: "all", label: "Tous" },
+                { value: "with", label: "Avec crédit" },
+                { value: "without", label: "Sans crédit" },
+              ]}
+            />
+            <FilterSelect
+              label="Cash-flow"
+              value={filterCash}
+              onChange={(v) => setFilterCash(v as "all" | "pos" | "neg")}
+              options={[
+                { value: "all", label: "Tous" },
+                { value: "pos", label: "Positif" },
+                { value: "neg", label: "Négatif" },
+              ]}
+            />
+      </FiltersPanel>
+
+      {filtered.length === 0 ? <FilterEmpty /> : null}
 
       <AnimatePresence mode="wait">
-        {display === "grid" ? (
+        {display === "grid" && filtered.length > 0 ? (
           <motion.div key="grid" variants={gridV} initial="hidden" animate="show" exit={{ opacity: 0, transition: { duration: 0.15 } }} className={cardsGrid}>
             {paging.pageItems.map((p) => {
               const sci = sciOf(p, scis);
@@ -734,7 +833,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
               );
             })}
           </motion.div>
-        ) : (
+        ) : display === "table" && filtered.length > 0 ? (
           <motion.div key="table" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} className={`${G} overflow-hidden`}>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -772,7 +871,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
               </table>
             </div>
           </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
       <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
     </div>
@@ -791,7 +890,10 @@ function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (
       <GSec title="Identité">
         <div className="space-y-3">
           <GI label="Nom complet" placeholder="SCI IR DUPONT" value={f.name} onChange={(e) => updF("name", e.target.value)} />
-          <div className="grid grid-cols-2 gap-3"><GI label="Nom court" placeholder="DUPONT" value={f.shortName} onChange={(e) => updF("shortName", e.target.value)} /><GI label="Date de création" placeholder="Janv. 2024" value={f.creation} onChange={(e) => updF("creation", e.target.value)} /></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <GI label="Nom court" placeholder="DUPONT" value={f.shortName} onChange={(e) => updF("shortName", e.target.value)} />
+            <GI label="Date de création" type="date" value={creationToInputValue(f.creation)} onChange={(e) => updF("creation", e.target.value)} />
+          </div>
           <div><label className={lbl}>Régime fiscal</label><div className="flex gap-2">{(["IR", "IS", "RP"] as const).map((t) => <motion.button key={t} whileTap={{ scale: 0.94 }} onClick={() => updF("type", t)} className="flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all" style={f.type === t ? { backgroundColor: "rgba(96,165,250,0.18)", borderColor: "#60a5fa", color: "#60a5fa" } : { borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.33)" }}>{t}</motion.button>)}</div></div>
           <GI label="Valeur estimée (€)" type="number" value={f.valeurEstimee || ""} onChange={(e) => updF("valeurEstimee", +e.target.value)} />
         </div>
@@ -815,7 +917,16 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<SCI | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
-  const paging = usePagination(scis, scis.length);
+  const [query, setQuery] = useState("");
+  const [filterType, setFilterType] = useState<"all" | "IR" | "IS" | "RP">("all");
+  const filtered = useMemo(() => scis.filter((s) => {
+    if (filterType !== "all" && s.type !== filterType) return false;
+    const assoc = s.associes.map((a) => a.name).join(" ");
+    return matchesSearch(query, s.name, s.shortName, s.type, s.creation, assoc);
+  }), [scis, filterType, query]);
+  const paging = usePagination(filtered, `${filterType}-${query}-${filtered.length}`);
+  const filtersActive = query !== "" || filterType !== "all";
+  const resetFilters = () => { setQuery(""); setFilterType("all"); };
   if (mode !== "list") {
     return (
       <SCIForm
@@ -833,7 +944,25 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
   }
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
-      <div className="flex justify-end"><button onClick={() => { setEditing(null); setMode("create"); }} className={btnP}><Plus size={14} />Nouvelle SCI</button></div>
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+        <SearchBar value={query} onChange={setQuery} placeholder="Rechercher une SCI, associé…" className="sm:flex-1" />
+        <button type="button" onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} whitespace-nowrap shrink-0 sm:ml-auto`}><Plus size={14} className="shrink-0" /><span className="whitespace-nowrap">Nouvelle SCI</span></button>
+      </div>
+      <FiltersPanel onReset={resetFilters} resetVisible={filtersActive}>
+            <FilterSelect
+              label="Régime"
+              value={filterType}
+              onChange={(v) => setFilterType(v as "all" | "IR" | "IS" | "RP")}
+              options={[
+                { value: "all", label: `Tous régimes (${scis.length})` },
+                ...(["IR", "IS", "RP"] as const).map((t) => ({
+                  value: t,
+                  label: `${t} (${scis.filter((s) => s.type === t).length})`,
+                })),
+              ]}
+            />
+      </FiltersPanel>
+      {filtered.length === 0 ? <FilterEmpty /> : null}
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2 gap-4 md:gap-5 w-full">
         {paging.pageItems.map((sci) => {
           const props = properties.filter((p) => p.sciId === sci.id);
@@ -842,7 +971,7 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
             <motion.div key={sci.id} variants={itemV} whileHover={{ y: -2 }} onClick={() => onSelectSci(sci.id)} className={`${G} overflow-hidden cursor-pointer`} style={{ borderColor: `${sci.color}1e` }}>
               <div className={`p-5 bg-gradient-to-br ${sci.gradient}`}>
                 <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold" style={{ backgroundColor: `${sci.color}25`, color: sci.color }}>{sci.shortName.slice(0, 2)}</div><div><p className="font-bold vision-text">{sci.name}</p><p className="text-xs vision-text-muted">{sci.creation}</p></div></div>
+                  <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold" style={{ backgroundColor: `${sci.color}25`, color: sci.color }}>{sci.shortName.slice(0, 2)}</div><div><p className="font-bold vision-text">{sci.name}</p><p className="text-xs vision-text-muted">{formatCreationDisplay(sci.creation)}</p></div></div>
                   <div className="flex items-center gap-1.5">
                     <span className="px-2 py-0.5 rounded-lg text-xs font-bold border" style={{ color: sci.color, borderColor: `${sci.color}38`, backgroundColor: `${sci.color}14` }}>{sci.type}</span>
                     <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(sci.id); }} className="w-8 h-8 rounded-lg vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text transition-all"><Maximize2 size={14} /></motion.button>
@@ -882,17 +1011,32 @@ type CreditEntry = Credit & { id: string; propertyId: string };
 function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { credit: CreditEntry | null; properties: Property[]; onSave: (c: CreditEntry) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!credit;
   const [f, setF] = useState<CreditEntry>(credit ?? { id: uid(), propertyId: properties[0]?.id ?? "", banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
+  const existingBanks = useMemo(
+    () => properties.map((p) => p.credit?.banque).filter((b): b is string => Boolean(b)),
+    [properties],
+  );
   const upd = (k: string, v: string | number) => setF((c) => patchCreditField(c, k, v));
   const enriched = useMemo(() => enrichCredit(f) as CreditEntry, [f]);
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
-      <FormHdr title={isEdit ? `Modifier · ${f.banque}` : "Nouveau crédit"} onBack={onBack} onDelete={onDelete} onSave={() => onSave({ ...enriched, id: f.id, propertyId: f.propertyId })} isEdit={isEdit} />
+      <FormHdr
+        title={isEdit ? `Modifier · ${f.banque}` : "Nouveau crédit"}
+        onBack={onBack}
+        onDelete={onDelete}
+        onSave={() => onSave({
+          ...enriched,
+          id: f.id,
+          propertyId: f.propertyId,
+          banque: resolveBankName(enriched.banque, existingBanks),
+        })}
+        isEdit={isEdit}
+      />
       <GSec title="Bien associé"><GS label="Bien" value={f.propertyId} onChange={(e) => upd("propertyId", e.target.value)} options={properties.map((p) => ({ value: p.id, label: `${p.address}, ${p.ville}` }))} /></GSec>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5 w-full">
       <GSec title="Prêt bancaire — saisie minimale">
         <p className="text-xs vision-text-muted mb-4">Renseignez montant, taux, date de début et date de fin. La durée et les mensualités se calculent automatiquement.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
-          <GI label="Banque" value={f.banque} onChange={(e) => upd("banque", e.target.value)} className="sm:col-span-2 xl:col-span-3" />
+          <BanqueField value={f.banque} onChange={(b) => upd("banque", b)} existingBanks={existingBanks} className="sm:col-span-2 xl:col-span-3" />
           <GI label="Montant emprunté (€)" type="number" value={f.montantInitial || ""} onChange={(e) => upd("montantInitial", +e.target.value)} />
           <GI label="Taux annuel (%)" type="number" step="0.01" value={f.taux || ""} onChange={(e) => upd("taux", +e.target.value)} />
           <GI label="Date de début" type="date" value={f.debut} onChange={(e) => upd("debut", e.target.value)} />
@@ -912,6 +1056,18 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<CreditEntry | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filterSci, setFilterSci] = useState("all");
+  const [filterBanque, setFilterBanque] = useState("all");
+  const banques = useMemo(() => [...new Set(allCredits.map((c) => c.banque).filter(Boolean))].sort(), [allCredits]);
+  const filtered = useMemo(() => allCredits.filter((c) => {
+    const prop = properties.find((p) => p.id === c.propertyId);
+    if (!prop) return false;
+    if (filterSci !== "all" && prop.sciId !== filterSci) return false;
+    if (filterBanque !== "all" && c.banque !== filterBanque) return false;
+    const sci = sciOf(prop, scis);
+    return matchesSearch(query, c.banque, prop.address, prop.ville, sci.shortName, String(c.taux), String(c.capitalRestant));
+  }), [allCredits, properties, scis, filterSci, filterBanque, query]);
   const save = async (c: CreditEntry) => {
     const computed = enrichCredit(c) as CreditEntry;
     const prop = properties.find((p) => p.id === c.propertyId)!;
@@ -937,7 +1093,9 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
     await onUpdateProperty({ ...prop, credit: undefined });
     setConfirmDel(null);
   };
-  const paging = usePagination(allCredits, allCredits.length);
+  const paging = usePagination(filtered, `${filterSci}-${filterBanque}-${query}-${filtered.length}`);
+  const filtersActive = query !== "" || filterSci !== "all" || filterBanque !== "all";
+  const resetFilters = () => { setQuery(""); setFilterSci("all"); setFilterBanque("all"); };
   if (mode !== "list") {
     return (
       <CreditFormView
@@ -952,14 +1110,42 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
 
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-3">
-          {[{ l: "Capital total", v: fmt(allCredits.reduce((s, c) => s + c.capitalRestant, 0)), c: "#f87171" }, { l: "Mensualités/mois", v: fmt(allCredits.reduce((s, c) => s + c.mensualite, 0)), c: "#a78bfa" }].map((k) => (
-            <div key={k.l} className={`${G} px-4 py-3`}><p className="text-xs vision-text-muted">{k.l}</p><p className="text-base font-bold font-mono mt-0.5" style={{ color: k.c }}>{k.v}</p></div>
+      <div className="flex flex-nowrap items-center gap-3 min-w-0 overflow-x-auto">
+        <div className="flex flex-nowrap items-stretch gap-3 shrink-0">
+          {[{ l: "Capital total", v: fmt(filtered.reduce((s, c) => s + c.capitalRestant, 0)), c: "#f87171" }, { l: "Mensualités/mois", v: fmt(filtered.reduce((s, c) => s + c.mensualite, 0)), c: "#a78bfa" }].map((k) => (
+            <div key={k.l} className={kpiBadge}><p className="text-xs vision-text-muted whitespace-nowrap">{k.l}</p><p className="text-base font-bold font-mono mt-0.5 whitespace-nowrap" style={{ color: k.c }}>{k.v}</p></div>
           ))}
         </div>
-        <button onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto`}><Plus size={14} /><span className="hidden sm:inline">Nouveau crédit</span></button>
+        <button type="button" onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto whitespace-nowrap shrink-0`}><Plus size={14} className="shrink-0" /><span className="whitespace-nowrap">Nouveau crédit</span></button>
       </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="Rechercher une banque, adresse, SCI…" />
+      <FiltersPanel onReset={resetFilters} resetVisible={filtersActive}>
+            <FilterSelect
+              label="Entité"
+              value={filterSci}
+              onChange={setFilterSci}
+              options={[
+                { value: "all", label: `Toutes (${allCredits.length})` },
+                ...scis.map((s) => ({
+                  value: s.id,
+                  label: `${s.shortName} (${allCredits.filter((c) => properties.find((p) => p.id === c.propertyId)?.sciId === s.id).length})`,
+                })),
+              ]}
+            />
+            <FilterSelect
+              label="Banque"
+              value={filterBanque}
+              onChange={setFilterBanque}
+              options={[
+                { value: "all", label: "Toutes banques" },
+                ...banques.map((b) => ({
+                  value: b,
+                  label: `${b} (${allCredits.filter((c) => c.banque === b).length})`,
+                })),
+              ]}
+            />
+      </FiltersPanel>
+      {filtered.length === 0 ? <FilterEmpty /> : null}
       <motion.div variants={gridV} initial="hidden" animate="show" className={cardsGrid}>
         {paging.pageItems.map((c) => {
           const prop = properties.find((p) => p.id === c.propertyId)!;
@@ -1003,7 +1189,16 @@ function TenantForm({ tenant, properties, scis, onSave, onBack, onDelete }: { te
   const upd = (k: keyof Tenant, v: string | number) => setF((t) => ({ ...t, [k]: v }));
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
-      <FormHdr title={isEdit ? `Modifier · ${f.nom}` : "Nouveau locataire"} onBack={onBack} onDelete={onDelete} onSave={() => onSave({ ...f, initiales: f.nom.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) })} isEdit={isEdit} />
+      <FormHdr
+        title={isEdit ? `Modifier · ${f.nom}` : "Nouveau locataire"}
+        onBack={onBack}
+        onDelete={onDelete}
+        onSave={() => onSave(syncTenantBailTs({
+          ...f,
+          initiales: f.nom.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2),
+        }))}
+        isEdit={isEdit}
+      />
       <GSec title="Bien loué"><GS label="Bien" value={f.propertyId} onChange={(e) => upd("propertyId", e.target.value)} options={properties.filter((p) => p.loyer > 0).map((p) => ({ value: p.id, label: `${p.address}, ${p.ville} (${sciOf(p, scis).shortName})` }))} /></GSec>
       <GSec title="Identité">
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
@@ -1029,7 +1224,19 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
-  const paging = usePagination(tenants, tenants.length);
+  const [query, setQuery] = useState("");
+  const [filterStatut, setFilterStatut] = useState<"all" | Tenant["statut"]>("all");
+  const [filterSci, setFilterSci] = useState("all");
+  const filtered = useMemo(() => tenants.filter((t) => {
+    if (filterStatut !== "all" && t.statut !== filterStatut) return false;
+    const prop = properties.find((p) => p.id === t.propertyId);
+    if (filterSci !== "all" && prop?.sciId !== filterSci) return false;
+    const sci = prop ? sciOf(prop, scis) : null;
+    return matchesSearch(query, t.nom, t.email, t.tel, t.statut, prop?.address, prop?.ville, sci?.shortName);
+  }), [tenants, properties, scis, filterStatut, filterSci, query]);
+  const paging = usePagination(filtered, `${filterStatut}-${filterSci}-${query}-${filtered.length}`);
+  const filtersActive = query !== "" || filterStatut !== "all" || filterSci !== "all";
+  const resetFilters = () => { setQuery(""); setFilterStatut("all"); setFilterSci("all"); };
   if (mode !== "list") {
     return (
       <TenantForm
@@ -1050,10 +1257,39 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
   const statStyle: Record<Tenant["statut"], { bg: string; color: string }> = { "En cours": { bg: "rgba(52,211,153,0.13)", color: "#34d399" }, "Impayé": { bg: "rgba(248,113,113,0.13)", color: "#f87171" }, "Terminé": { bg: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" } };
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-3">{[{ l: "Actifs", v: `${tenants.filter((t) => t.statut !== "Terminé").length}`, c: "#60a5fa" }, { l: "Loyers/mois", v: fmt(tenants.filter((t) => t.statut === "En cours").reduce((s, t) => s + t.loyer, 0)), c: "#34d399" }, { l: "Impayés", v: `${tenants.filter((t) => t.statut === "Impayé").length}`, c: "#f87171" }].map((k) => <div key={k.l} className={`${G} px-4 py-3`}><p className="text-xs vision-text-muted">{k.l}</p><p className="text-base font-bold font-mono mt-0.5" style={{ color: k.c }}>{k.v}</p></div>)}</div>
-        <button onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto`}><Plus size={14} /><span className="hidden sm:inline">Nouveau locataire</span></button>
+      <div className="flex flex-nowrap items-center gap-3 min-w-0 overflow-x-auto">
+        <div className="flex flex-nowrap items-stretch gap-3 shrink-0">
+          {[{ l: "Actifs", v: `${filtered.filter((t) => t.statut !== "Terminé").length}`, c: "#60a5fa" }, { l: "Loyers/mois", v: fmt(filtered.filter((t) => t.statut === "En cours").reduce((s, t) => s + t.loyer, 0)), c: "#34d399" }, { l: "Impayés", v: `${filtered.filter((t) => t.statut === "Impayé").length}`, c: "#f87171" }].map((k) => (
+            <div key={k.l} className={kpiBadge}><p className="text-xs vision-text-muted whitespace-nowrap">{k.l}</p><p className="text-base font-bold font-mono mt-0.5 whitespace-nowrap" style={{ color: k.c }}>{k.v}</p></div>
+          ))}
+        </div>
+        <button type="button" onClick={() => { setEditing(null); setMode("create"); }} className={`${btnP} ml-auto whitespace-nowrap shrink-0`}><Plus size={14} className="shrink-0" /><span className="whitespace-nowrap">Nouveau locataire</span></button>
       </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="Rechercher un locataire, email, bien…" />
+      <FiltersPanel onReset={resetFilters} resetVisible={filtersActive}>
+            <FilterSelect
+              label="Statut"
+              value={filterStatut}
+              onChange={(v) => setFilterStatut(v as "all" | Tenant["statut"])}
+              options={[
+                { value: "all", label: `Tous (${tenants.length})` },
+                ...(["En cours", "Impayé", "Terminé"] as const).map((s) => ({
+                  value: s,
+                  label: `${s} (${tenants.filter((t) => t.statut === s).length})`,
+                })),
+              ]}
+            />
+            <FilterSelect
+              label="Entité"
+              value={filterSci}
+              onChange={setFilterSci}
+              options={[
+                { value: "all", label: "Toutes entités" },
+                ...scis.map((s) => ({ value: s.id, label: s.shortName })),
+              ]}
+            />
+      </FiltersPanel>
+      {filtered.length === 0 ? <FilterEmpty /> : null}
       <motion.div variants={gridV} initial="hidden" animate="show" className={cardsGrid}>
         {paging.pageItems.map((t) => {
           const prop = properties.find((p) => p.id === t.propertyId)!;
@@ -1077,7 +1313,7 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
                 </div>
               </div>
               {prop && <motion.div whileHover={{ x: 2 }} className="vision-surface rounded-xl p-3 mb-3 flex items-center gap-2"><MapPin size={14} style={{ color: sci.color }} className="flex-shrink-0" /><div className="min-w-0"><p className="text-xs font-semibold vision-text truncate">{prop.address}</p><p className="text-xs vision-text-muted">{prop.ville} · {prop.type}</p></div></motion.div>}
-              <div className="mb-3"><div className="flex justify-between mb-1.5"><span className="text-xs vision-text-muted">{t.debutBail}</span><span className="text-xs vision-text-muted">{t.finBail}</span></div><GBar pct={pct} color={sci.color} /><p className="text-xs vision-text-muted mt-1">{pct < 100 ? `${100 - pct}% de bail restant` : "Bail terminé"}</p></div>
+              <div className="mb-3"><div className="flex justify-between mb-1.5"><span className="text-xs vision-text-muted">{formatBailDate(t.debutBail)}</span><span className="text-xs vision-text-muted">{formatBailDate(t.finBail)}</span></div><GBar pct={pct} color={sci.color} /><p className="text-xs vision-text-muted mt-1">{pct < 100 ? `${100 - pct}% de bail restant` : "Bail terminé"}</p></div>
               <div className="flex items-center justify-between pt-3 border-t border-[var(--v-border-subtle)]">
                 <div><p className="text-xs vision-text-muted">Loyer</p><p className="text-sm font-bold font-mono vision-text">{fmt(t.loyer)}</p></div>
                 {t.charges > 0 && <div><p className="text-xs vision-text-muted">Charges</p><p className="text-xs font-mono vision-text-muted">{fmt(t.charges)}</p></div>}
@@ -1098,15 +1334,39 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
 // ─── COMPTABILITÉ ─────────────────────────────────────────────────────────────
 
 function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onSelectSci: (id: string) => void; onOpenFullPage: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [filterResult, setFilterResult] = useState<"all" | "pos" | "neg">("all");
+  const filteredScis = useMemo(() => scis.filter((sci) => {
+    const props = properties.filter((p) => p.sciId === sci.id);
+    const res = props.reduce((s, p) => s + cashFlow(p), 0);
+    if (filterResult === "pos" && res < 0) return false;
+    if (filterResult === "neg" && res >= 0) return false;
+    return matchesSearch(query, sci.name, sci.shortName, sci.type);
+  }), [scis, properties, query, filterResult]);
   const grandCF = properties.reduce((s, p) => s + cashFlow(p), 0);
-  const barData = scis.map((sci) => { const props = properties.filter((p) => p.sciId === sci.id); return { name: sci.shortName, revenus: props.reduce((s, p) => s + p.loyer, 0), charges: props.reduce((s, p) => s + (p.credit?.mensualite ?? 0) + p.taxeFonciere / 12 + p.assurance / 12, 0), fill: sci.color }; });
-  const paging = usePagination(scis, scis.length);
+  const barData = filteredScis.map((sci) => { const props = properties.filter((p) => p.sciId === sci.id); return { name: sci.shortName, revenus: props.reduce((s, p) => s + p.loyer, 0), charges: props.reduce((s, p) => s + (p.credit?.mensualite ?? 0) + p.taxeFonciere / 12 + p.assurance / 12, 0), fill: sci.color }; });
+  const paging = usePagination(filteredScis, `${query}-${filterResult}-${filteredScis.length}`);
+  const filtersActive = query !== "" || filterResult !== "all";
+  const resetFilters = () => { setQuery(""); setFilterResult("all"); };
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <motion.div variants={itemV} initial="hidden" animate="show" className={`${GE} p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4`} style={{ borderColor: grandCF >= 0 ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)" }}>
         <div><p className={lbl}>Résultat net consolidé mensuel</p><p className="text-3xl sm:text-4xl font-bold" style={{ color: grandCF >= 0 ? "#34d399" : "#f87171", fontFamily: "'JetBrains Mono',monospace" }}>{grandCF >= 0 ? "+" : ""}{fmt(grandCF)}</p></div>
         <p className="vision-text-muted text-sm font-mono">{fmt(grandCF * 12)} / an</p>
       </motion.div>
+      <SearchBar value={query} onChange={setQuery} placeholder="Rechercher une entité…" />
+      <FiltersPanel onReset={resetFilters} resetVisible={filtersActive}>
+            <FilterSelect
+              label="Résultat"
+              value={filterResult}
+              onChange={(v) => setFilterResult(v as "all" | "pos" | "neg")}
+              options={[
+                { value: "all", label: `Tous (${scis.length})` },
+                { value: "pos", label: "Positif" },
+                { value: "neg", label: "Négatif" },
+              ]}
+            />
+      </FiltersPanel>
       <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.1 }} className={`${G} p-5`}>
         <p className={`${lbl} mb-4`}>Revenus vs Charges par entité</p>
         <ResponsiveContainer width="100%" height={210}>
@@ -1120,6 +1380,7 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
           </BarChart>
         </ResponsiveContainer>
       </motion.div>
+      {filteredScis.length === 0 ? <FilterEmpty /> : null}
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2 gap-4 md:gap-5 w-full">
         {paging.pageItems.map((sci) => {
           const props = properties.filter((p) => p.sciId === sci.id);
@@ -1156,16 +1417,55 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
 // ─── PATRIMOINE ───────────────────────────────────────────────────────────────
 
 function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onSelectProperty: (id: string) => void; onOpenFullPage: (id: string) => void }) {
-  const items = properties.map((p) => { const cr = p.prixAchat + p.travaux + p.fraisNotaire; const pv = p.valeurActuelle - cr; return { p, cr, pv, pct: (pv / cr) * 100, sci: sciOf(p, scis) }; }).sort((a, b) => b.pv - a.pv);
-  const paging = usePagination(items, items.length);
+  const [query, setQuery] = useState("");
+  const [filterSci, setFilterSci] = useState("all");
+  const [filterPv, setFilterPv] = useState<"all" | "pos" | "neg">("all");
+  const items = useMemo(() => properties
+    .map((p) => {
+      const cr = p.prixAchat + p.travaux + p.fraisNotaire;
+      const pv = p.valeurActuelle - cr;
+      return { p, cr, pv, pct: cr > 0 ? (pv / cr) * 100 : 0, sci: sciOf(p, scis) };
+    })
+    .filter((x) => {
+      if (filterSci !== "all" && x.p.sciId !== filterSci) return false;
+      if (filterPv === "pos" && x.pv < 0) return false;
+      if (filterPv === "neg" && x.pv >= 0) return false;
+      return matchesSearch(query, x.p.address, x.p.ville, x.p.type, x.sci.shortName, x.sci.name);
+    })
+    .sort((a, b) => b.pv - a.pv), [properties, scis, query, filterSci, filterPv]);
+  const paging = usePagination(items, `${filterSci}-${filterPv}-${query}-${items.length}`);
   const totalPV = items.reduce((s, x) => s + x.pv, 0);
+  const filtersActive = query !== "" || filterSci !== "all" || filterPv !== "all";
+  const resetFilters = () => { setQuery(""); setFilterSci("all"); setFilterPv("all"); };
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[{ l: "Coût de revient total", v: fmt(items.reduce((s, x) => s + x.cr, 0)), c: "rgba(255,255,255,0.65)" }, { l: "Valeur de marché", v: fmt(scis.reduce((s, x) => s + x.valeurEstimee, 0)), c: "#60a5fa" }, { l: "Plus-value latente", v: `+${fmt(totalPV)}`, c: "#34d399" }].map((k, i) => (
+        {[{ l: "Coût de revient total", v: fmt(items.reduce((s, x) => s + x.cr, 0)), c: "rgba(255,255,255,0.65)" }, { l: "Valeur de marché", v: fmt(scis.reduce((s, x) => s + x.valeurEstimee, 0)), c: "#60a5fa" }, { l: "Plus-value latente", v: `${totalPV >= 0 ? "+" : ""}${fmt(totalPV)}`, c: totalPV >= 0 ? "#34d399" : "#f87171" }].map((k, i) => (
           <motion.div key={k.l} variants={itemV} initial="hidden" animate="show" transition={{ delay: i * 0.07 }} className={`${G} p-4`}><p className={lbl}>{k.l}</p><p className="text-xl font-bold font-mono" style={{ color: k.c }}>{k.v}</p></motion.div>
         ))}
       </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="Rechercher un bien, une ville, une SCI…" />
+      <FiltersPanel onReset={resetFilters} resetVisible={filtersActive}>
+            <FilterSelect
+              label="Entité"
+              value={filterSci}
+              onChange={setFilterSci}
+              options={[
+                { value: "all", label: "Toutes entités" },
+                ...scis.map((s) => ({ value: s.id, label: s.shortName })),
+              ]}
+            />
+            <FilterSelect
+              label="Plus-value"
+              value={filterPv}
+              onChange={(v) => setFilterPv(v as "all" | "pos" | "neg")}
+              options={[
+                { value: "all", label: "Toutes" },
+                { value: "pos", label: "Positive" },
+                { value: "neg", label: "Négative" },
+              ]}
+            />
+      </FiltersPanel>
       <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.15 }} className={`${G} p-5`}>
         <p className={`${lbl} mb-4`}>Évolution 2017 – 2024 · k€</p>
         <ResponsiveContainer width="100%" height={240}>
@@ -1185,6 +1485,7 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
         </ResponsiveContainer>
       </motion.div>
 
+      {items.length === 0 ? <FilterEmpty /> : null}
       {/* Desktop table / mobile cards */}
       <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.2 }} className={`${G} overflow-hidden`}>
         <div className="px-5 py-4 border-b border-[var(--v-border-subtle)]"><p className={lbl}>Plus-values latentes par bien</p></div>
@@ -1227,14 +1528,26 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
 // ─── ALERTES — TIMELINE ───────────────────────────────────────────────────────
 
 function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { alerts: AlertItem[]; onDelete: (id: string) => void; onSelectAlert: (id: string) => void; onOpenFullPage: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [filterSev, setFilterSev] = useState<"all" | AlertItem["severity"]>("all");
+  const [filterType, setFilterType] = useState<"all" | AlertItem["type"]>("all");
   const iconMap = { bail: Key, credit: CreditCard, taxe: Calendar, assurance: Shield, info: AlertTriangle };
   const sevCfg = {
     high: { color: "#f87171", bg: "rgba(248,113,113,0.1)", border: "rgba(248,113,113,0.22)", label: "Urgent", dot: "#ef4444" },
     medium: { color: "#fbbf24", bg: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.18)", label: "Important", dot: "#f59e0b" },
     low: { color: "rgba(255,255,255,0.38)", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.09)", label: "Info", dot: "rgba(255,255,255,0.28)" },
   };
-  const sorted = [...alerts].sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]));
-  const paging = usePagination(sorted, sorted.length);
+  const sorted = useMemo(() => [...alerts]
+    .filter((a) => {
+      if (filterSev !== "all" && a.severity !== filterSev) return false;
+      if (filterType !== "all" && a.type !== filterType) return false;
+      return matchesSearch(query, a.title, a.detail, a.type, a.severity);
+    })
+    .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity])),
+  [alerts, filterSev, filterType, query]);
+  const paging = usePagination(sorted, `${filterSev}-${filterType}-${query}-${sorted.length}`);
+  const filtersActive = query !== "" || filterSev !== "all" || filterType !== "all";
+  const resetFilters = () => { setQuery(""); setFilterSev("all"); setFilterType("all"); };
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-3 gap-4">
@@ -1243,6 +1556,34 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
           return <motion.div key={sev} variants={itemV} initial="hidden" animate="show" transition={{ delay: i * 0.07 }} className={`${G} p-4`} style={{ borderColor: cfg.border }}><p className="text-xs vision-text-muted mb-1">{cfg.label}s</p><p className="text-3xl font-bold" style={{ color: cfg.color, fontFamily: "'JetBrains Mono',monospace" }}>{cnt}</p></motion.div>;
         })}
       </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="Rechercher une alerte…" />
+      <FiltersPanel onReset={resetFilters} resetVisible={filtersActive}>
+            <FilterSelect
+              label="Urgence"
+              value={filterSev}
+              onChange={(v) => setFilterSev(v as "all" | AlertItem["severity"])}
+              options={[
+                { value: "all", label: `Toutes (${alerts.length})` },
+                ...(["high", "medium", "low"] as const).map((sev) => ({
+                  value: sev,
+                  label: `${sevCfg[sev].label} (${alerts.filter((a) => a.severity === sev).length})`,
+                })),
+              ]}
+            />
+            <FilterSelect
+              label="Type"
+              value={filterType}
+              onChange={(v) => setFilterType(v as "all" | AlertItem["type"])}
+              options={[
+                { value: "all", label: "Tous types" },
+                ...(["bail", "credit", "taxe", "assurance", "info"] as const).map((t) => ({
+                  value: t,
+                  label: `${t} (${alerts.filter((a) => a.type === t).length})`,
+                })),
+              ]}
+            />
+      </FiltersPanel>
+      {sorted.length === 0 ? <FilterEmpty label={alerts.length === 0 ? "Aucune alerte active" : "Aucun résultat pour ces filtres"} /> : null}
       <div className="relative min-w-0">
         <div className="absolute left-3 sm:left-5 top-2 bottom-2 w-px hidden sm:block" style={{ background: "linear-gradient(to bottom, rgba(255,255,255,0.12), rgba(255,255,255,0.03))" }} />
         <div className="space-y-3 pl-0 sm:pl-12">
@@ -1266,7 +1607,6 @@ function AlertesView({ alerts, onDelete, onSelectAlert, onOpenFullPage }: { aler
               </motion.div>
             );
           })}
-          {alerts.length === 0 && <div className="text-center py-14"><p className="vision-text-muted text-sm">Aucune alerte active</p></div>}
         </div>
       </div>
       <PaginationBar page={paging.page} totalPages={paging.totalPages} total={paging.total} from={paging.from} to={paging.to} onChange={paging.setPage} />
@@ -1473,6 +1813,9 @@ function VisionShell() {
         } else {
           const token = localStorage.getItem("vision_auth_token");
           if (!token) {
+            // Session Supabase résiduelle sans token API → forcer une vraie reconnexion
+            clearSession();
+            if (!cancelled) setAuthUser(null);
             setAuthChecked(true);
             return;
           }
@@ -2012,6 +2355,7 @@ function VisionShell() {
                       <PropertyForm
                         property={p}
                         scis={visibleScis}
+                        existingBanks={visibleProperties.map((x) => x.credit?.banque).filter((b): b is string => Boolean(b))}
                         onBack={exitEdit}
                         onSave={async (next) => { await updProp(next); exitEdit(); }}
                         onDelete={async () => { await delProp(p.id); afterDelete(); }}
