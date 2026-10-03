@@ -1,4 +1,5 @@
 import type { AuthUser, UserRole } from "./auth";
+import { syncTenantBailTs } from "./bailDates";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 function requireClient() {
@@ -403,19 +404,20 @@ export async function deleteProperty(id: string) {
 
 export async function upsertTenant(tenant: TenantRow): Promise<TenantRow> {
   const client = requireClient();
+  const synced = syncTenantBailTs(tenant);
   const row = {
-    property_id: tenant.propertyId,
-    nom: tenant.nom,
-    initiales: tenant.initiales,
-    tel: tenant.tel || null,
-    email: tenant.email || null,
-    debut_bail: tenant.debutBail,
-    fin_bail: tenant.finBail,
-    debut_ts: tenant.debutTs,
-    fin_ts: tenant.finTs,
-    loyer: tenant.loyer,
-    charges: tenant.charges,
-    statut: tenant.statut,
+    property_id: synced.propertyId,
+    nom: synced.nom,
+    initiales: synced.initiales,
+    tel: synced.tel || null,
+    email: synced.email || null,
+    debut_bail: synced.debutBail,
+    fin_bail: synced.finBail,
+    debut_ts: synced.debutTs,
+    fin_ts: synced.finTs,
+    loyer: synced.loyer,
+    charges: synced.charges,
+    statut: synced.statut,
   };
 
   if (isUuid(tenant.id)) {
@@ -423,16 +425,16 @@ export async function upsertTenant(tenant: TenantRow): Promise<TenantRow> {
     if (existing) {
       const { error } = await client.from("tenants").update(row).eq("id", tenant.id);
       if (error) throw new Error(error.message);
-      return tenant;
+      return synced;
     }
     const { data, error } = await client.from("tenants").insert({ id: tenant.id, ...row }).select("id").single();
     if (error || !data) throw new Error(error?.message ?? "Création locataire impossible");
-    return { ...tenant, id: data.id as string };
+    return { ...synced, id: data.id as string };
   }
 
   const { data, error } = await client.from("tenants").insert(row).select("id").single();
   if (error || !data) throw new Error(error?.message ?? "Création locataire impossible");
-  return { ...tenant, id: data.id as string };
+  return { ...synced, id: data.id as string };
 }
 
 export async function deleteTenant(id: string) {
@@ -491,22 +493,28 @@ export async function createDossier(input: {
   const expires = new Date();
   expires.setDate(expires.getDate() + 30);
 
+  const title = input.title.trim();
+  const targetBank = input.targetBank.trim();
+  if (!title) throw new Error("Indiquez un titre de dossier.");
+  if (!targetBank) throw new Error("Choisissez une banque destinataire.");
+
   const { data, error } = await client
     .from("bank_dossiers")
     .insert({
       reference: ref,
-      title: input.title,
-      target_bank: input.targetBank,
-      message: input.message ?? null,
-      montant_demande: input.montantDemande ?? null,
-      objet: input.objet ?? null,
+      title,
+      target_bank: targetBank,
+      message: input.message?.trim() || null,
+      montant_demande: input.montantDemande != null && input.montantDemande > 0 ? input.montantDemande : null,
+      objet: input.objet?.trim() || null,
       entity_slugs: input.entitySlugs ?? [],
       include_patrimoine: input.includePatrimoine ?? true,
       include_endettement: input.includeEndettement ?? true,
       include_cash_flow: input.includeCashFlow ?? true,
       anonymize_tenants: input.anonymizeTenants ?? true,
       payload: input.payload,
-      created_by: input.createdBy,
+      // Évite l’échec FK si l’id local n’est pas un UUID profil
+      created_by: isUuid(input.createdBy) ? input.createdBy : null,
       expires_at: expires.toISOString(),
       status: input.sendNow ? "SENT" : "DRAFT",
       sent_at: input.sendNow ? new Date().toISOString() : null,

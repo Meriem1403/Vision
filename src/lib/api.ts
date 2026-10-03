@@ -2,6 +2,19 @@ import { getStoredToken } from "./auth";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
+function parseApiError(text: string, status: number): string {
+  const raw = text.trim();
+  if (!raw) return `Erreur API ${status}`;
+  try {
+    const json = JSON.parse(raw) as { error?: string; message?: string };
+    if (typeof json.error === "string" && json.error.trim()) return json.error;
+    if (typeof json.message === "string" && json.message.trim()) return json.message;
+  } catch {
+    /* texte brut */
+  }
+  return raw;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getStoredToken();
   const res = await fetch(`${API_BASE}${path}`, {
@@ -14,7 +27,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Erreur API ${res.status}`);
+    throw new Error(parseApiError(text, res.status));
   }
   return res.json() as Promise<T>;
 }

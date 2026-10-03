@@ -1,4 +1,5 @@
 import { Maximize2 } from "lucide-react";
+import { formatCreationDisplay } from "@/lib/creationDate";
 import { DetailDrawer } from "./DetailDrawer";
 import { PropertyDetailContent, CreditDetailContent } from "./PropertyDetail";
 import { PropertyDetailPage } from "./PropertyDetailPage";
@@ -34,7 +35,7 @@ function drawerMeta(target: DetailTarget, ctx: {
     }
     case "sci": {
       const s = scis.find((x) => x.id === target.id);
-      return { title: s?.name ?? "", subtitle: s ? `${s.type} · ${s.creation}` : undefined };
+      return { title: s?.name ?? "", subtitle: s ? `${s.type} · ${formatCreationDisplay(s.creation)}` : undefined };
     }
     case "tenant": {
       const t = tenants.find((x) => x.id === target.id);

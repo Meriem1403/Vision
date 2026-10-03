@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mail, MapPin, Pencil, Phone, Shield, AlertTriangle, Trash2 } from "lucide-react";
+import { formatBailDate, leaseProgressPct } from "@/lib/bailDates";
+import { formatCreationDisplay } from "@/lib/creationDate";
 import { computePortfolioYield, computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricLabel } from "./MetricWithFormula";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, metricsGridPage, tableScroll, mobileDetailCard, G, lbl } from "./layout";
@@ -42,10 +44,7 @@ export function cashFlow(p: Property) {
 }
 
 function leasePct(t: Tenant) {
-  const now = Date.now();
-  if (now >= t.finTs) return 100;
-  if (now <= t.debutTs) return 0;
-  return Math.round(((now - t.debutTs) / (t.finTs - t.debutTs)) * 100);
+  return leaseProgressPct(t);
 }
 
 function CashChip({ value }: { value: number }) {
@@ -181,7 +180,7 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
       backLabel={backLabel}
       onBack={onBack}
       title={sci.name}
-      subtitle={`${sci.creation} · ${sci.type} · ${props.length} bien${props.length > 1 ? "s" : ""}`}
+      subtitle={`${formatCreationDisplay(sci.creation)} · ${sci.type} · ${props.length} bien${props.length > 1 ? "s" : ""}`}
       color={sci.color}
       headerExtra={<FullPageCrudActions onEdit={onEdit} onDelete={onDelete} />}
     >
@@ -280,7 +279,7 @@ export function TenantDetailContent({ tenant, property, sci, variant = "drawer" 
         <div className="vision-surface rounded-xl p-3 min-w-0 sm:col-span-1 col-span-1"><p className="text-xs vision-text-muted mb-1">Total mensuel</p><p className="font-mono font-bold vision-positive-text break-words">{fmt(tenant.loyer + tenant.charges)}</p></div>
       </div>
       <div>
-        <div className="flex justify-between mb-1.5 text-xs vision-text-muted"><span>{tenant.debutBail}</span><span>{tenant.finBail}</span></div>
+        <div className="flex justify-between mb-1.5 text-xs vision-text-muted"><span>{formatBailDate(tenant.debutBail)}</span><span>{formatBailDate(tenant.finBail)}</span></div>
         <GBar pct={pct} color={sci.color} />
         <p className="text-xs vision-text-muted mt-1">{pct < 100 ? `${100 - pct}% de bail restant` : "Bail terminé"}</p>
       </div>
