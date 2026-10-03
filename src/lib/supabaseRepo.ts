@@ -222,20 +222,28 @@ export async function fetchPortfolio(): Promise<{
   if (entitiesRes.error) throw new Error(entitiesRes.error.message);
   if (propsRes.error) throw new Error(propsRes.error.message);
 
-  const scis: SciRow[] = (entitiesRes.data ?? []).map((e) => ({
-    id: e.slug,
-    name: e.name,
-    shortName: e.short_name,
-    type: e.type,
-    creation: e.creation ?? "",
-    valeurEstimee: Number(e.valeur_estimee),
-    color: e.color,
-    gradient: e.gradient ?? "",
-    associes: (e.shareholders ?? []).map((s: { name: string; parts: number }) => ({
-      name: s.name,
-      parts: Number(s.parts),
-    })),
-  }));
+  const scis: SciRow[] = (entitiesRes.data ?? []).map((e) => {
+    const rawType = String(e.type ?? "").trim().toUpperCase();
+    const type = (rawType === "RP" || rawType === "IR" || rawType === "IS"
+      ? rawType
+      : String(e.slug).toLowerCase() === "rp"
+        ? "RP"
+        : "IR") as SciRow["type"];
+    return {
+      id: e.slug,
+      name: e.name,
+      shortName: e.short_name,
+      type,
+      creation: e.creation ?? "",
+      valeurEstimee: Number(e.valeur_estimee),
+      color: e.color,
+      gradient: e.gradient ?? "",
+      associes: (e.shareholders ?? []).map((s: { name: string; parts: number }) => ({
+        name: s.name,
+        parts: Number(s.parts),
+      })),
+    };
+  });
 
   const properties: PropertyRow[] = (propsRes.data ?? []).map((p) => {
     const loan = Array.isArray(p.loans) ? p.loans[0] : p.loans;

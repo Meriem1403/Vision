@@ -6,6 +6,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useNumberStepperHandlers } from "./numberStepper";
 import { inp, lbl } from "./layout";
 
 /** Champ texte avec icône à gauche (style Vision). */
@@ -60,13 +61,15 @@ export function IconNumberField({
     } as ChangeEvent<HTMLInputElement>);
   };
 
-  const stepNumber = (dir: 1 | -1) => {
-    const s = Number(step ?? 1) || 1;
-    const lo = min !== undefined && min !== "" ? Number(min) : Number.NEGATIVE_INFINITY;
-    const hi = max !== undefined && max !== "" ? Number(max) : Number.POSITIVE_INFINITY;
-    const cur = Number(value === "" || value === undefined ? inputRef.current?.value : value) || 0;
-    emit(Math.min(hi, Math.max(lo, Math.round((cur + dir * s) * 1e6) / 1e6)));
-  };
+  const getValue = () =>
+    Number(value === "" || value === undefined ? inputRef.current?.value : value) || 0;
+
+  const upHandlers = useNumberStepperHandlers({
+    dir: 1, step, min, max, getValue, emit,
+  });
+  const downHandlers = useNumberStepperHandlers({
+    dir: -1, step, min, max, getValue, emit,
+  });
 
   return (
     <div className={className}>
@@ -88,8 +91,8 @@ export function IconNumberField({
             type="button"
             tabIndex={-1}
             aria-label="Augmenter"
-            onClick={() => stepNumber(1)}
-            className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded"
+            className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded select-none touch-none"
+            {...upHandlers}
           >
             <ChevronUp size={14} strokeWidth={2.25} />
           </button>
@@ -97,8 +100,8 @@ export function IconNumberField({
             type="button"
             tabIndex={-1}
             aria-label="Diminuer"
-            onClick={() => stepNumber(-1)}
-            className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded"
+            className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded select-none touch-none"
+            {...downHandlers}
           >
             <ChevronDown size={14} strokeWidth={2.25} />
           </button>

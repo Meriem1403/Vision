@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { buildAmortizationSchedule, computeLoanSummary, type LoanInput } from "@/lib/loanCalculator";
 import { computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricCard } from "./MetricWithFormula";
@@ -134,7 +134,40 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
   const schedule = buildAmortizationSchedule(loanInput);
   const cf = Math.round(property.loyer - summary.mensualite - property.taxeFonciere / 12);
 
-  const scheduleRows = fullSchedule ? schedule : previewSchedule ? schedule.slice(0, 6) : schedule.slice(0, 24);
+  const today = useMemo(() => {
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), 1);
+  }, []);
+
+  const currentIndex = useMemo(() => {
+    if (!schedule.length) return 0;
+    let idx = schedule.findIndex((row) => {
+      const d = new Date(row.periode.getFullYear(), row.periode.getMonth(), 1);
+      return d.getTime() >= today.getTime();
+    });
+    if (idx < 0) idx = schedule.length - 1;
+    return idx;
+  }, [schedule, today]);
+
+  const scheduleRows = useMemo(() => {
+    if (fullSchedule) return schedule;
+    if (previewSchedule) return schedule.slice(currentIndex, currentIndex + 6);
+    // Vue intermédiaire : autour d’aujourd’hui (passé proche + futur)
+    const from = Math.max(0, currentIndex - 2);
+    return schedule.slice(from, from + 24);
+  }, [fullSchedule, previewSchedule, schedule, currentIndex]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const currentRowRef = useRef<HTMLTableRowElement>(null);
+
+  useEffect(() => {
+    if (!fullSchedule) return;
+    currentRowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [fullSchedule, currentIndex, credit.debut, credit.duree]);
+
+  const debutLabel = credit.debut
+    ? new Date(credit.debut + (credit.debut.length === 10 ? "T12:00:00" : "")).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
+    : "—";
 
   return (
     <div className="space-y-4 w-full min-w-0">
@@ -150,6 +183,7 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
         <MetricCard label="Banque" value={credit.banque} />
         <MetricCard label="Taux annuel" value={`${credit.taux} %`} />
         <MetricCard label="Montant emprunté" value={fmt(credit.montantInitial)} />
+        <MetricCard label="Date de début" value={debutLabel} />
         <MetricCard label="Capital restant" value={fmt(summary.capitalRestant)} color="#f87171" />
         <MetricCard label="Mensualité crédit" value={fmtD(summary.mensualite)} color="#a78bfa" />
         <MetricCard label="Assurance / mois" value={fmtD(credit.assuranceMensuelle ?? 0)} />
@@ -160,9 +194,15 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
       </div>
       )}
 
-      <Section title={previewSchedule ? "Prochaines échéances" : "Tableau d'amortissement"}>
-        <p className="text-xs vision-text-muted mb-2 sm:hidden">Glissez horizontalement pour les colonnes · faites défiler la page pour voir toutes les lignes</p>
+      <Section title={previewSchedule ? "Prochaines échéances (depuis aujourd’hui)" : "Tableau d'amortissement"}>
+        {!previewSchedule && (
+          <p className="text-xs vision-text-muted mb-2">
+            Mois en cours mis en évidence · mensualité = crédit + assurance (comme le TAM banque)
+          </p>
+        )}
+        <p className="text-xs vision-text-muted mb-2 sm:hidden">Glissez horizontalement pour les colonnes · faites défiler pour voir les lignes</p>
         <div
+          ref={scrollRef}
           className={`w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x -mx-1 px-1 ${
             fullSchedule ? "sm:max-h-[min(70vh,640px)] sm:overflow-y-auto sm:overscroll-y-contain" : ""
           }`}
@@ -176,23 +216,35 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
                   { h: "CRD", hide: false },
                   { h: "Capital", hide: "sm" },
                   { h: "Intérêts", hide: "sm" },
-                  { h: "Mensualité", hide: false },
+                  { h: "Échéance", hide: false },
                 ].map(({ h, hide }) => (
                   <th key={h} className={`text-left py-2 px-1.5 sm:px-2 font-bold whitespace-nowrap ${hide === "sm" ? "hidden sm:table-cell" : ""}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {scheduleRows.map((row) => (
-                <tr key={row.moisIndex} className="border-b border-[var(--v-border-subtle)] hover:vision-surface">
-                  <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-text-muted">{row.moisIndex}</td>
-                  <td className="py-1.5 px-1.5 sm:px-2 vision-text-muted whitespace-nowrap">{row.periode.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" })}</td>
-                  <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-text whitespace-nowrap">{fmtD(row.crd)}</td>
-                  <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-positive-text/80 whitespace-nowrap hidden sm:table-cell">{fmtD(row.capitalAmorti)}</td>
-                  <td className="py-1.5 px-1.5 sm:px-2 font-mono text-amber-300/80 whitespace-nowrap hidden sm:table-cell">{fmtD(row.interets)}</td>
-                  <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-text whitespace-nowrap">{fmtD(row.mensualite)}</td>
-                </tr>
-              ))}
+              {scheduleRows.map((row) => {
+                const rowMonth = new Date(row.periode.getFullYear(), row.periode.getMonth(), 1);
+                const isCurrent = rowMonth.getTime() === today.getTime();
+                const echeance = row.mensualite + (row.assurance || 0);
+                return (
+                  <tr
+                    key={row.moisIndex}
+                    ref={isCurrent ? currentRowRef : undefined}
+                    className={`border-b border-[var(--v-border-subtle)] ${isCurrent ? "bg-blue-500/15" : "hover:vision-surface"}`}
+                  >
+                    <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-text-muted">
+                      {row.moisIndex}
+                      {isCurrent ? <span className="ml-1 text-[10px] font-bold vision-info-text">auj.</span> : null}
+                    </td>
+                    <td className="py-1.5 px-1.5 sm:px-2 vision-text-muted whitespace-nowrap">{row.periode.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" })}</td>
+                    <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-text whitespace-nowrap">{fmtD(row.crd)}</td>
+                    <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-positive-text/80 whitespace-nowrap hidden sm:table-cell">{fmtD(row.capitalAmorti)}</td>
+                    <td className="py-1.5 px-1.5 sm:px-2 font-mono text-amber-300/80 whitespace-nowrap hidden sm:table-cell">{fmtD(row.interets)}</td>
+                    <td className="py-1.5 px-1.5 sm:px-2 font-mono vision-text whitespace-nowrap">{fmtD(echeance)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -202,7 +254,7 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
           </p>
         )}
         {fullSchedule && (
-          <p className="text-xs vision-text-muted mt-2 text-center">{schedule.length} échéances · durée totale {credit.duree} mois</p>
+          <p className="text-xs vision-text-muted mt-2 text-center">{schedule.length} échéances · début {debutLabel} · durée {credit.duree} mois</p>
         )}
       </Section>
     </div>

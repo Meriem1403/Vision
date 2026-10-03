@@ -16,6 +16,7 @@ import { BanqueField } from "@/app/components/BanqueField";
 import { FilterEmpty, FilterSelect, FiltersPanel, SearchBar, matchesSearch } from "@/app/components/ListFilters";
 import { PaginationBar, useCardsGridPageSize, useDuoGridPageSize, usePagination } from "@/app/components/Pagination";
 import { TamPdfImportButton } from "@/app/components/TamPdfImport";
+import { useNumberStepperHandlers } from "@/app/components/numberStepper";
 import type { TamImportResult } from "@/lib/tamPdfImport";
 import { resolveBankName } from "@/lib/banks";
 import {
@@ -50,6 +51,12 @@ import {
   canAccessView, canManageData, defaultViewForRole, filterProperties, filterScisWithProperties,
   associeShareRatio, PAGE_TITLES, type View,
 } from "@/lib/permissions";
+import {
+  filterInvestmentEntities,
+  filterPropertiesByEntities,
+  filterResidenceEntities,
+  isResidenceEntity,
+} from "@/lib/portfolioSegments";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   deleteAlert as sbDeleteAlert,
@@ -206,14 +213,25 @@ function GI({ label, className = "", type, onChange, value, ...p }: React.InputH
     } as React.ChangeEvent<HTMLInputElement>);
   };
 
-  const stepNumber = (dir: 1 | -1) => {
-    const step = Number(p.step ?? 1) || 1;
-    const min = p.min !== undefined && p.min !== "" ? Number(p.min) : Number.NEGATIVE_INFINITY;
-    const max = p.max !== undefined && p.max !== "" ? Number(p.max) : Number.POSITIVE_INFINITY;
-    const cur = Number(value === "" || value === undefined ? inputRef.current?.value : value) || 0;
-    const next = Math.min(max, Math.max(min, Math.round((cur + dir * step) * 1e6) / 1e6));
-    emitNumber(next);
-  };
+  const getNumberValue = () =>
+    Number(value === "" || value === undefined ? inputRef.current?.value : value) || 0;
+
+  const upHandlers = useNumberStepperHandlers({
+    dir: 1,
+    step: p.step,
+    min: p.min,
+    max: p.max,
+    getValue: getNumberValue,
+    emit: emitNumber,
+  });
+  const downHandlers = useNumberStepperHandlers({
+    dir: -1,
+    step: p.step,
+    min: p.min,
+    max: p.max,
+    getValue: getNumberValue,
+    emit: emitNumber,
+  });
 
   return (
     <div className={className}>
@@ -241,8 +259,8 @@ function GI({ label, className = "", type, onChange, value, ...p }: React.InputH
               type="button"
               tabIndex={-1}
               aria-label="Augmenter"
-              onClick={() => stepNumber(1)}
-              className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded"
+              className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded select-none touch-none"
+              {...upHandlers}
             >
               <ChevronUp size={14} strokeWidth={2.25} />
             </button>
@@ -250,8 +268,8 @@ function GI({ label, className = "", type, onChange, value, ...p }: React.InputH
               type="button"
               tabIndex={-1}
               aria-label="Diminuer"
-              onClick={() => stepNumber(-1)}
-              className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded"
+              className="vision-field-icon inline-flex items-center justify-center w-6 h-3.5 rounded select-none touch-none"
+              {...downHandlers}
             >
               <ChevronDown size={14} strokeWidth={2.25} />
             </button>
@@ -414,20 +432,30 @@ function DashboardView({
   onSelectProperty: (id: string) => void;
   user?: AuthUser | null;
 }) {
-  const shareName = personalShareName(user, scis);
+  // Filet de sécurité : la RP ne doit jamais entrer dans les KPI investissement
+  const investScis = useMemo(() => filterInvestmentEntities(scis), [scis]);
+  const investProperties = useMemo(
+    () => filterPropertiesByEntities(properties, investScis),
+    [properties, investScis],
+  );
+  const isResidenceSegment = scis.length > 0 && scis.every((s) => isResidenceEntity(s));
+  const scopeScis = isResidenceSegment ? scis : investScis;
+  const scopeProperties = isResidenceSegment ? properties : investProperties;
 
-  const totalBrut = scis.reduce((s, x) => s + x.valeurEstimee, 0);
-  const totalDette = properties.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
-  const loyers = properties.reduce((s, p) => s + p.loyer * 12, 0);
-  const chargesAnnuelles = properties.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
-  const cf = properties.reduce((s, p) => s + cashFlow(p), 0);
+  const shareName = personalShareName(user, scopeScis);
+
+  const totalBrut = scopeScis.reduce((s, x) => s + x.valeurEstimee, 0);
+  const totalDette = scopeProperties.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
+  const loyers = scopeProperties.reduce((s, p) => s + p.loyer * 12, 0);
+  const chargesAnnuelles = scopeProperties.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
+  const cf = scopeProperties.reduce((s, p) => s + cashFlow(p), 0);
   const yieldPct = computePortfolioYield({ loyersAnnuels: loyers, chargesAnnuelles, patrimoineBrut: totalBrut });
 
-  const personal = shareName
-    ? scis.reduce(
+  const personal = shareName && !isResidenceSegment
+    ? investScis.reduce(
         (acc, sci) => {
           const ratio = sciShareRatio(sci, shareName);
-          const props = properties.filter((p) => p.sciId === sci.id);
+          const props = investProperties.filter((p) => p.sciId === sci.id);
           const dette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
           const mens = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0), 0);
           const cash = props.reduce((s, p) => s + cashFlow(p), 0);
@@ -496,7 +524,7 @@ function DashboardView({
             <div>
               <p className={lbl}>Quote-part personnelle</p>
               <p className="text-xs sm:text-sm vision-text-muted mt-0.5">
-                Indicateurs au prorata des parts de {shareName} dans chaque SCI
+                Indicateurs au prorata des parts de {shareName} dans les SCI d&apos;investissement (hors résidence principale)
               </p>
             </div>
           </div>
@@ -512,10 +540,10 @@ function DashboardView({
             ))}
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {scis.map((sci) => {
+            {investScis.map((sci) => {
               const ratio = sciShareRatio(sci, shareName!);
               const pct = Math.round(ratio * 100);
-              const props = properties.filter((p) => p.sciId === sci.id);
+              const props = investProperties.filter((p) => p.sciId === sci.id);
               const dette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
               return (
                 <div key={sci.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 vision-surface">
@@ -534,8 +562,8 @@ function DashboardView({
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 md:gap-5 w-full">
         <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.12 }} className={`${G} p-4 sm:p-5 xl:col-span-2 w-full min-w-0`}>
           <p className={`${lbl} mb-4`}>Répartition par entité{shareName ? ` · ${shareName}` : ""}</p>
-          <div style={{ height: 160 }}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={scis.map((s) => ({ name: s.shortName, value: shareName ? s.valeurEstimee * sciShareRatio(s, shareName) : s.valeurEstimee, color: s.color }))} dataKey="value" nameKey="name" innerRadius={45} outerRadius={74} paddingAngle={3}>{scis.map((s, i) => <Cell key={i} fill={s.color} opacity={0.82} />)}</Pie><Tooltip content={<ChartTooltipContent unit="currency" />} /></PieChart></ResponsiveContainer></div>
-          <div className="mt-4 space-y-2.5">{scis.map((s) => {
+          <div style={{ height: 160 }}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={scopeScis.map((s) => ({ name: s.shortName, value: shareName ? s.valeurEstimee * sciShareRatio(s, shareName) : s.valeurEstimee, color: s.color }))} dataKey="value" nameKey="name" innerRadius={45} outerRadius={74} paddingAngle={3}>{scopeScis.map((s, i) => <Cell key={i} fill={s.color} opacity={0.82} />)}</Pie><Tooltip content={<ChartTooltipContent unit="currency" />} /></PieChart></ResponsiveContainer></div>
+          <div className="mt-4 space-y-2.5">{scopeScis.map((s) => {
             const ratio = shareName ? sciShareRatio(s, shareName) : 1;
             const val = s.valeurEstimee * ratio;
             return (
@@ -568,8 +596,8 @@ function DashboardView({
         </motion.div>
       </div>
       <motion.div variants={gridV} initial="hidden" animate="show" className={`${cardsGrid}`}>
-        {[...properties].sort((a, b) => cashFlow(b) - cashFlow(a)).slice(0, 4).map((p) => {
-          const sci = sciOf(p, scis);
+        {[...scopeProperties].sort((a, b) => cashFlow(b) - cashFlow(a)).slice(0, 4).map((p) => {
+          const sci = sciOf(p, scopeScis);
           return (
             <motion.div key={p.id} variants={itemV} whileHover={{ y: -4 }} onClick={() => onSelectProperty(p.id)} className={`${G} p-4 overflow-hidden cursor-pointer`} style={{ borderColor: `${sci.color}18` }}>
               <div className="h-0.5 w-10 rounded-full mb-4" style={{ backgroundColor: sci.color, boxShadow: `0 0 8px ${sci.color}` }} />
@@ -583,8 +611,8 @@ function DashboardView({
       </motion.div>
 
       <VisionPatrimoinePanel
-        scis={scis}
-        properties={properties}
+        scis={scopeScis}
+        properties={scopeProperties}
         onSelectProperty={onSelectProperty}
         shareholderName={shareName}
       />
@@ -605,6 +633,7 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
   const updC = (k: keyof Credit, v: string | number) => setCred((c) => patchCreditField(c, k, v));
   const applyTamImport = (r: TamImportResult) => {
     setHasCredit(true);
+    // Ne pas passer une fin PDF partielle : enrichCredit dérive fin = début + durée (mensualité exacte)
     setCred((c) => enrichCredit({
       ...c,
       banque: r.banque || c.banque,
@@ -612,7 +641,7 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
       taux: r.taux,
       duree: r.duree,
       debut: r.debut,
-      finCredit: r.finCredit,
+      finCredit: null,
       assuranceMensuelle: r.assuranceMensuelle,
       mensualite: r.mensualite,
       capitalRestant: r.capitalRestant,
@@ -976,10 +1005,12 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
               onChange={(v) => setFilterType(v as "all" | "IR" | "IS" | "RP")}
               options={[
                 { value: "all", label: `Tous régimes (${scis.length})` },
-                ...(["IR", "IS", "RP"] as const).map((t) => ({
-                  value: t,
-                  label: `${t} (${scis.filter((s) => s.type === t).length})`,
-                })),
+                ...(["IR", "IS", "RP"] as const)
+                  .filter((t) => scis.some((s) => s.type === t))
+                  .map((t) => ({
+                    value: t,
+                    label: `${t} (${scis.filter((s) => s.type === t).length})`,
+                  })),
               ]}
             />
       </FiltersPanel>
@@ -1045,7 +1076,7 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
       taux: r.taux,
       duree: r.duree,
       debut: r.debut,
-      finCredit: r.finCredit,
+      finCredit: null,
       assuranceMensuelle: r.assuranceMensuelle,
       mensualite: r.mensualite,
       capitalRestant: r.capitalRestant,
@@ -1761,15 +1792,17 @@ function VisionShell() {
     return tenants.filter((t) => propIds.has(t.propertyId));
   }, [authUser, tenants, visibleProperties]);
 
-  /** Investissement (IR/IS) vs Résidence principale (RP) — évite de fausser les KPI locatifs */
+  /** Investissement (SCI) vs Résidence principale — totalement séparés (KPI / quote-part / listes) */
   const segmentScis = useMemo(
-    () => visibleScis.filter((s) => (portfolioSegment === "residence" ? s.type === "RP" : s.type !== "RP")),
+    () => (portfolioSegment === "residence"
+      ? filterResidenceEntities(visibleScis)
+      : filterInvestmentEntities(visibleScis)),
     [visibleScis, portfolioSegment],
   );
-  const segmentProperties = useMemo(() => {
-    const ids = new Set(segmentScis.map((s) => s.id));
-    return visibleProperties.filter((p) => ids.has(p.sciId));
-  }, [visibleProperties, segmentScis]);
+  const segmentProperties = useMemo(
+    () => filterPropertiesByEntities(visibleProperties, segmentScis),
+    [visibleProperties, segmentScis],
+  );
   const segmentTenants = useMemo(() => {
     const ids = new Set(segmentProperties.map((p) => p.id));
     return visibleTenants.filter((t) => ids.has(t.propertyId));
@@ -2467,8 +2500,8 @@ function VisionShell() {
                 <PortfolioSegmentTabs
                   segment={portfolioSegment}
                   onChange={setPortfolioSegment}
-                  investCount={visibleScis.filter((s) => s.type !== "RP").length}
-                  rpCount={visibleScis.filter((s) => s.type === "RP").length}
+                  investCount={filterInvestmentEntities(visibleScis).length}
+                  rpCount={filterResidenceEntities(visibleScis).length}
                 />
               )}
               {view === "dashboard" && <DashboardView properties={segmentProperties} scis={segmentScis} user={authUser} onSelectProperty={(id) => openPropertyDrawer(id)} />}
@@ -2481,9 +2514,9 @@ function VisionShell() {
               {view === "dossiers" && canAccessView(authUser, "dossiers") && (
                 <BankDossierView
                   user={authUser}
-                  entityOptions={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
-                  properties={visibleProperties}
-                  scis={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
+                  entityOptions={filterInvestmentEntities(visibleScis).map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
+                  properties={filterPropertiesByEntities(visibleProperties, filterInvestmentEntities(visibleScis))}
+                  scis={filterInvestmentEntities(visibleScis).map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
                 />
               )}
               {view === "comptes" && canAccessView(authUser, "comptes") && (
