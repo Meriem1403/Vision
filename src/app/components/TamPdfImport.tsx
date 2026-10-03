@@ -1,8 +1,7 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState, type DragEvent } from "react";
 import { FileUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { TamImportResult } from "@/lib/tamPdfImport";
-import { btnG } from "@/app/components/layout";
 
 export function TamPdfImportButton({
   existingBanks = [],
@@ -15,10 +14,12 @@ export function TamPdfImportButton({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
-  const run = async (file: File | undefined) => {
+  const run = useCallback(async (file: File | undefined) => {
     if (!file || busy) return;
     setBusy(true);
+    setDragOver(false);
     try {
       const { importTamPdf } = await import("@/lib/tamPdfImport");
       const result = await importTamPdf(file, existingBanks);
@@ -31,6 +32,26 @@ export function TamPdfImportButton({
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
     }
+  }, [busy, existingBanks, onImported]);
+
+  const onDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!busy) setDragOver(true);
+  };
+
+  const onDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  };
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    void run(file);
   };
 
   return (
@@ -46,16 +67,32 @@ export function TamPdfImportButton({
         type="button"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        className={`${btnG} w-full sm:w-auto justify-center disabled:opacity-50`}
-        title="Extraire montant, taux, dates et assurance — le PDF n’est pas enregistré"
+        onDragOver={onDragOver}
+        onDragEnter={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        className={`w-full rounded-xl border border-dashed px-4 py-4 text-left transition-all disabled:opacity-50 ${
+          dragOver
+            ? "border-[var(--v-accent)] bg-[color-mix(in_srgb,var(--v-accent)_12%,transparent)]"
+            : "border-[var(--v-border-subtle)] vision-surface hover:border-[color-mix(in_srgb,var(--v-accent)_45%,transparent)]"
+        }`}
+        title="Glisser un PDF ou cliquer pour choisir — le fichier n’est pas enregistré"
       >
-        {busy ? <Loader2 size={14} className="animate-spin shrink-0" /> : <FileUp size={14} className="shrink-0" />}
-        <span className="whitespace-nowrap">{busy ? "Lecture du PDF…" : "Importer un TAM (PDF)"}</span>
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg vision-glass">
+            {busy ? <Loader2 size={16} className="animate-spin vision-text-muted" /> : <FileUp size={16} className="vision-text-muted" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold vision-text">
+              {busy ? "Lecture du PDF…" : dragOver ? "Déposez le PDF ici" : "Importer un TAM (PDF)"}
+            </p>
+            <p className="text-xs vision-text-muted mt-1 leading-relaxed">
+              Glissez-déposez ou cliquez pour choisir. Extraction locale uniquement —
+              le PDF n’est jamais stocké.
+            </p>
+          </div>
+        </div>
       </button>
-      <p className="text-xs vision-text-muted mt-2 leading-relaxed">
-        Déposez le tableau d’amortissement banque. On extrait uniquement les champs utiles pour recalculer
-        le crédit — <span className="vision-text-muted font-medium">le PDF n’est jamais stocké</span>.
-      </p>
     </div>
   );
 }
