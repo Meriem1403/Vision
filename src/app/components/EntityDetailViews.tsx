@@ -391,9 +391,9 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
   const maxV = Math.max(loyers, credits + taxes + assurances + honoraires, 1);
   const rows = [
     { label: "Loyers", value: loyers, color: "#34d399" },
-    { label: "Crédits", value: credits, color: "#f87171" },
-    { label: "Taxe foncière", value: taxes, color: "#fbbf24" },
-    { label: "Assurances", value: assurances, color: "#94a3b8" },
+    { label: "Crédits (+ ass. empr.)", value: credits, color: "#f87171" },
+        { label: "Taxe foncière", value: taxes, color: "#fbbf24" },
+        { label: "Assurance PNO", value: assurances, color: "#94a3b8" },
     ...(honoraires > 0 ? [{ label: "Honoraires gestion", value: honoraires, color: "#a78bfa" }] : []),
   ];
 
