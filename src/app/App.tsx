@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
+import { toast, Toaster } from "sonner";
 import { computeLoanSummary, enrichCredit, patchCreditField } from "@/lib/loanCalculator";
 import { api, isApiAvailable } from "@/lib/api";
 import {
@@ -294,11 +295,41 @@ function Ring({ pct, color, size = 64 }: { pct: number; color: string; size?: nu
 function GBar({ pct, color }: { pct: number; color: string }) {
   return <div className="w-full h-1.5 vision-surface rounded-full overflow-hidden"><motion.div className="h-full rounded-full" initial={{ width: 0 }} animate={{ width: `${Math.min(pct, 100)}%` }} transition={{ duration: 0.7, delay: 0.15, ease }} style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}55` }} /></div>;
 }
-function FormHdr({ title, onBack, onDelete, onSave, isEdit }: { title: string; onBack: () => void; onDelete?: () => void; onSave: () => void; isEdit: boolean }) {
+function FormHdr({ title, onBack, onDelete, onSave, isEdit }: {
+  title: string;
+  onBack: () => void;
+  onDelete?: () => void | Promise<void>;
+  onSave: () => void | Promise<void>;
+  isEdit: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => void | Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className={`${G} px-4 py-4 flex flex-wrap gap-3 items-center justify-between mb-6`}>
-      <div className="flex items-center gap-3 min-w-0"><button onClick={onBack} className={btnG}><ChevronLeft size={14} /><span className="hidden sm:inline">Retour</span></button><p className="vision-text font-semibold text-sm truncate">{title}</p></div>
-      <div className="flex items-center gap-2">{isEdit && onDelete && <button onClick={onDelete} className={btnD}><Trash2 size={13} /><span className="hidden sm:inline">Supprimer</span></button>}<button onClick={onSave} className={btnS}><Check size={13} />{isEdit ? "Enregistrer" : "Créer"}</button></div>
+      <div className="flex items-center gap-3 min-w-0">
+        <button type="button" onClick={onBack} disabled={busy} className={btnG}>
+          <ChevronLeft size={14} /><span className="hidden sm:inline">Retour</span>
+        </button>
+        <p className="vision-text font-semibold text-sm truncate">{title}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {isEdit && onDelete && (
+          <button type="button" disabled={busy} onClick={() => run(onDelete)} className={btnD}>
+            <Trash2 size={13} /><span className="hidden sm:inline">Supprimer</span>
+          </button>
+        )}
+        <button type="button" disabled={busy} onClick={() => run(onSave)} className={btnS}>
+          <Check size={13} />{busy ? "Enregistrement…" : isEdit ? "Enregistrer" : "Créer"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -545,7 +576,7 @@ function DashboardView({
 
 const PTYPES = ["T1", "T2", "T3", "T4", "Maison", "Immeuble", "Local commercial"];
 
-function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: Property | null; scis: SCI[]; onSave: (p: Property) => void; onBack: () => void; onDelete?: () => void }) {
+function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: Property | null; scis: SCI[]; onSave: (p: Property) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!property;
   const [f, setF] = useState<Property>(property ?? { id: uid(), sciId: scis[0]?.id ?? "", address: "", ville: "", cp: "", type: "T2", surface: 0, lots: 1, prixAchat: 0, travaux: 0, fraisNotaire: 0, valeurActuelle: 0, loyer: 0, taxeFonciere: 0, assurance: 0 });
   const [hasCredit, setHasCredit] = useState(!!property?.credit);
@@ -621,7 +652,7 @@ function PropertyForm({ property, scis, onSave, onBack, onDelete }: { property: 
 
 // ─── BIENS VIEW ──────────────────────────────────────────────────────────────
 
-function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProperty, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onAdd: (p: Property) => void; onUpdate: (p: Property) => void; onDelete: (id: string) => void; onSelectProperty: (id: string) => void; onOpenFullPage: (id: string) => void }) {
+function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProperty, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onAdd: (p: Property) => void | Promise<void>; onUpdate: (p: Property) => void | Promise<void>; onDelete: (id: string) => void | Promise<void>; onSelectProperty: (id: string) => void; onOpenFullPage: (id: string) => void }) {
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<Property | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
@@ -629,7 +660,22 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
   const [display, setDisplay] = useState<"grid" | "table">("grid");
   const filtered = properties.filter((p) => filterSci === "all" || p.sciId === filterSci);
   const paging = usePagination(filtered, `${filterSci}-${filtered.length}`);
-  if (mode !== "list") return <PropertyForm property={editing} scis={scis} onBack={() => { setMode("list"); setEditing(null); }} onSave={(p) => { mode === "create" ? onAdd(p) : onUpdate(p); setMode("list"); setEditing(null); }} onDelete={editing ? () => { onDelete(editing.id); setMode("list"); setEditing(null); } : undefined} />;
+  if (mode !== "list") {
+    return (
+      <PropertyForm
+        property={editing}
+        scis={scis}
+        onBack={() => { setMode("list"); setEditing(null); }}
+        onSave={async (p) => {
+          if (mode === "create") await onAdd(p);
+          else await onUpdate(p);
+          setMode("list");
+          setEditing(null);
+        }}
+        onDelete={editing ? async () => { await onDelete(editing.id); setMode("list"); setEditing(null); } : undefined}
+      />
+    );
+  }
 
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
@@ -732,7 +778,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
 
 // ─── SCI FORM & VIEW ─────────────────────────────────────────────────────────
 
-function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (s: SCI) => void; onBack: () => void; onDelete?: () => void }) {
+function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (s: SCI) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!sci;
   const [f, setF] = useState<SCI>(sci ?? { id: uid(), name: "", shortName: "", type: "IR", creation: "", valeurEstimee: 0, associes: [{ name: "", parts: 50 }, { name: "", parts: 50 }], color: "#60a5fa", gradient: "from-blue-500/20 to-transparent" });
   const updF = (k: keyof SCI, v: string | number) => setF((s) => ({ ...s, [k]: v }));
@@ -762,12 +808,26 @@ function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (
   );
 }
 
-function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onOpenFullPage }: { scis: SCI[]; properties: Property[]; onAdd: (s: SCI) => void; onUpdate: (s: SCI) => void; onDelete: (id: string) => void; onSelectSci: (id: string) => void; onOpenFullPage: (id: string) => void }) {
+function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onOpenFullPage }: { scis: SCI[]; properties: Property[]; onAdd: (s: SCI) => void | Promise<void>; onUpdate: (s: SCI) => void | Promise<void>; onDelete: (id: string) => void | Promise<void>; onSelectSci: (id: string) => void; onOpenFullPage: (id: string) => void }) {
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<SCI | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const paging = usePagination(scis, scis.length);
-  if (mode !== "list") return <SCIForm sci={editing} onBack={() => { setMode("list"); setEditing(null); }} onSave={(s) => { mode === "create" ? onAdd(s) : onUpdate(s); setMode("list"); setEditing(null); }} onDelete={editing ? () => { onDelete(editing.id); setMode("list"); setEditing(null); } : undefined} />;
+  if (mode !== "list") {
+    return (
+      <SCIForm
+        sci={editing}
+        onBack={() => { setMode("list"); setEditing(null); }}
+        onSave={async (s) => {
+          if (mode === "create") await onAdd(s);
+          else await onUpdate(s);
+          setMode("list");
+          setEditing(null);
+        }}
+        onDelete={editing ? async () => { await onDelete(editing.id); setMode("list"); setEditing(null); } : undefined}
+      />
+    );
+  }
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <div className="flex justify-end"><button onClick={() => { setEditing(null); setMode("create"); }} className={btnP}><Plus size={14} />Nouvelle SCI</button></div>
@@ -816,7 +876,7 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
 
 type CreditEntry = Credit & { id: string; propertyId: string };
 
-function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { credit: CreditEntry | null; properties: Property[]; onSave: (c: CreditEntry) => void; onBack: () => void; onDelete?: () => void }) {
+function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { credit: CreditEntry | null; properties: Property[]; onSave: (c: CreditEntry) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!credit;
   const [f, setF] = useState<CreditEntry>(credit ?? { id: uid(), propertyId: properties[0]?.id ?? "", banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
   const upd = (k: string, v: string | number) => setF((c) => patchCreditField(c, k, v));
@@ -844,15 +904,15 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
   );
 }
 
-function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onUpdateProperty: (p: Property) => void; onSelectCredit: (propertyId: string) => void; onOpenFullPage: (propertyId: string) => void }) {
+function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onUpdateProperty: (p: Property) => void | Promise<void>; onSelectCredit: (propertyId: string) => void; onOpenFullPage: (propertyId: string) => void }) {
   const allCredits: CreditEntry[] = properties.filter((p) => p.credit).map((p) => ({ ...p.credit!, id: `c_${p.id}`, propertyId: p.id }));
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<CreditEntry | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
-  const save = (c: CreditEntry) => {
+  const save = async (c: CreditEntry) => {
     const computed = enrichCredit(c) as CreditEntry;
     const prop = properties.find((p) => p.id === c.propertyId)!;
-    onUpdateProperty({
+    await onUpdateProperty({
       ...prop,
       credit: {
         banque: computed.banque,
@@ -869,9 +929,23 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
     setMode("list");
     setEditing(null);
   };
-  const del = (c: CreditEntry) => { const prop = properties.find((p) => p.id === c.propertyId)!; onUpdateProperty({ ...prop, credit: undefined }); setConfirmDel(null); };
+  const del = async (c: CreditEntry) => {
+    const prop = properties.find((p) => p.id === c.propertyId)!;
+    await onUpdateProperty({ ...prop, credit: undefined });
+    setConfirmDel(null);
+  };
   const paging = usePagination(allCredits, allCredits.length);
-  if (mode !== "list") return <CreditFormView credit={editing} properties={properties} onBack={() => { setMode("list"); setEditing(null); }} onSave={save} onDelete={editing ? () => { del(editing); setMode("list"); setEditing(null); } : undefined} />;
+  if (mode !== "list") {
+    return (
+      <CreditFormView
+        credit={editing}
+        properties={properties}
+        onBack={() => { setMode("list"); setEditing(null); }}
+        onSave={save}
+        onDelete={editing ? async () => { await del(editing); setMode("list"); setEditing(null); } : undefined}
+      />
+    );
+  }
 
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
@@ -920,7 +994,7 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
 
 // ─── TENANT FORM & VIEW ──────────────────────────────────────────────────────
 
-function TenantForm({ tenant, properties, scis, onSave, onBack, onDelete }: { tenant: Tenant | null; properties: Property[]; scis: SCI[]; onSave: (t: Tenant) => void; onBack: () => void; onDelete?: () => void }) {
+function TenantForm({ tenant, properties, scis, onSave, onBack, onDelete }: { tenant: Tenant | null; properties: Property[]; scis: SCI[]; onSave: (t: Tenant) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!tenant;
   const [f, setF] = useState<Tenant>(tenant ?? { id: uid(), propertyId: properties[0]?.id ?? "", nom: "", initiales: "", tel: "", email: "", debutBail: "", finBail: "", debutTs: 0, finTs: 0, loyer: 0, charges: 0, statut: "En cours" });
   const upd = (k: keyof Tenant, v: string | number) => setF((t) => ({ ...t, [k]: v }));
@@ -948,12 +1022,28 @@ function TenantForm({ tenant, properties, scis, onSave, onBack, onDelete }: { te
   );
 }
 
-function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, onSelectTenant, onOpenFullPage }: { tenants: Tenant[]; properties: Property[]; scis: SCI[]; onAdd: (t: Tenant) => void; onUpdate: (t: Tenant) => void; onDelete: (id: string) => void; onSelectTenant: (id: string) => void; onOpenFullPage: (id: string) => void }) {
+function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, onSelectTenant, onOpenFullPage }: { tenants: Tenant[]; properties: Property[]; scis: SCI[]; onAdd: (t: Tenant) => void | Promise<void>; onUpdate: (t: Tenant) => void | Promise<void>; onDelete: (id: string) => void | Promise<void>; onSelectTenant: (id: string) => void; onOpenFullPage: (id: string) => void }) {
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const paging = usePagination(tenants, tenants.length);
-  if (mode !== "list") return <TenantForm tenant={editing} properties={properties} scis={scis} onBack={() => { setMode("list"); setEditing(null); }} onSave={(t) => { mode === "create" ? onAdd(t) : onUpdate(t); setMode("list"); setEditing(null); }} onDelete={editing ? () => { onDelete(editing.id); setMode("list"); setEditing(null); } : undefined} />;
+  if (mode !== "list") {
+    return (
+      <TenantForm
+        tenant={editing}
+        properties={properties}
+        scis={scis}
+        onBack={() => { setMode("list"); setEditing(null); }}
+        onSave={async (t) => {
+          if (mode === "create") await onAdd(t);
+          else await onUpdate(t);
+          setMode("list");
+          setEditing(null);
+        }}
+        onDelete={editing ? async () => { await onDelete(editing.id); setMode("list"); setEditing(null); } : undefined}
+      />
+    );
+  }
   const statStyle: Record<Tenant["statut"], { bg: string; color: string }> = { "En cours": { bg: "rgba(52,211,153,0.13)", color: "#34d399" }, "Impayé": { bg: "rgba(248,113,113,0.13)", color: "#f87171" }, "Terminé": { bg: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" } };
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
@@ -1516,19 +1606,36 @@ function VisionShell() {
     navigate("/login", { replace: true });
   };
 
-  const addProp = (p: Property) => {
+  const reloadPortfolio = async () => {
+    if (!useSupabase) return;
+    const data = await fetchPortfolio();
+    setScis(data.scis as SCI[]);
+    setProperties(data.properties.map((p) => ({
+      ...p,
+      credit: p.credit ? enrichCredit(p.credit as Credit) : undefined,
+    })));
+    setTenants(data.tenants as Tenant[]);
+    setAlerts(data.alerts as AlertItem[]);
+  };
+
+  const addProp = async (p: Property) => {
     if (useSupabase) {
-      sbUpsertProperty(p)
-        .then((saved) => {
-          setProperties((ps) => [...ps, { ...p, ...saved, credit: saved.credit ? enrichCredit(saved.credit as Credit) : undefined }]);
-          setDataError("");
-        })
-        .catch((e) => setDataError(e instanceof Error ? e.message : "Enregistrement bien impossible"));
+      try {
+        const saved = await sbUpsertProperty(p);
+        setProperties((ps) => [...ps, { ...p, ...saved, credit: saved.credit ? enrichCredit(saved.credit as Credit) : undefined }]);
+        setDataError("");
+        toast.success("Bien enregistré en base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Enregistrement bien impossible";
+        setDataError(msg);
+        toast.error(msg);
+        throw e;
+      }
       return;
     }
     setProperties((ps) => [...ps, p]);
     if (apiOnline) {
-      api.createProperty({
+      await api.createProperty({
         entityId: p.sciId,
         address: p.address,
         ville: p.ville,
@@ -1547,27 +1654,31 @@ function VisionShell() {
       }).catch(() => {});
     }
   };
-  const updProp = (p: Property) => {
+  const updProp = async (p: Property) => {
     if (useSupabase) {
-      // Optimistic UI, puis sync DB
-      setProperties((ps) => ps.map((x) => (x.id === p.id ? p : x)));
-      sbUpsertProperty(p)
-        .then((saved) => {
-          setProperties((ps) =>
-            ps.map((x) =>
-              x.id === p.id || x.id === saved.id
-                ? { ...p, ...saved, credit: saved.credit ? enrichCredit(saved.credit as Credit) : undefined }
-                : x,
-            ),
-          );
-          setDataError("");
-        })
-        .catch((e) => setDataError(e instanceof Error ? e.message : "Mise à jour bien impossible"));
+      try {
+        const saved = await sbUpsertProperty(p);
+        setProperties((ps) =>
+          ps.map((x) =>
+            x.id === p.id || x.id === saved.id
+              ? { ...p, ...saved, credit: saved.credit ? enrichCredit(saved.credit as Credit) : undefined }
+              : x,
+          ),
+        );
+        setDataError("");
+        toast.success("Modifications enregistrées en base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Mise à jour bien impossible";
+        setDataError(msg);
+        toast.error(msg);
+        await reloadPortfolio().catch(() => {});
+        throw e;
+      }
       return;
     }
     setProperties((ps) => ps.map((x) => (x.id === p.id ? p : x)));
     if (apiOnline) {
-      api.updateProperty(p.id, {
+      await api.updateProperty(p.id, {
         entityId: p.sciId,
         address: p.address,
         ville: p.ville,
@@ -1586,86 +1697,141 @@ function VisionShell() {
       }).catch(() => {});
     }
   };
-  const delProp = (id: string) => {
+  const delProp = async (id: string) => {
     if (useSupabase) {
-      setProperties((ps) => ps.filter((x) => x.id !== id));
-      sbDeleteProperty(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression bien impossible"));
+      try {
+        await sbDeleteProperty(id);
+        setProperties((ps) => ps.filter((x) => x.id !== id));
+        toast.success("Bien supprimé de la base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Suppression bien impossible";
+        setDataError(msg);
+        toast.error(msg);
+        await reloadPortfolio().catch(() => {});
+        throw e;
+      }
       return;
     }
     setProperties((ps) => ps.filter((x) => x.id !== id));
-    if (apiOnline) api.deleteProperty(id).catch(() => {});
+    if (apiOnline) await api.deleteProperty(id).catch(() => {});
   };
-  const addSCI = (s: SCI) => {
+  const addSCI = async (s: SCI) => {
     if (useSupabase) {
-      sbUpsertSci(s)
-        .then((saved) => {
-          setScis((ss) => [...ss, { ...s, ...saved }]);
-          setDataError("");
-        })
-        .catch((e) => setDataError(e instanceof Error ? e.message : "Enregistrement SCI impossible"));
+      try {
+        const saved = await sbUpsertSci(s);
+        setScis((ss) => [...ss, { ...s, ...saved }]);
+        setDataError("");
+        toast.success("SCI enregistrée en base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Enregistrement SCI impossible";
+        setDataError(msg);
+        toast.error(msg);
+        throw e;
+      }
       return;
     }
     setScis((ss) => [...ss, s]);
   };
-  const updSCI = (s: SCI) => {
+  const updSCI = async (s: SCI) => {
     if (useSupabase) {
-      setScis((ss) => ss.map((x) => (x.id === s.id ? s : x)));
-      sbUpsertSci(s)
-        .then((saved) => {
-          setScis((ss) => ss.map((x) => (x.id === s.id || x.id === saved.id ? { ...s, ...saved } : x)));
-          setDataError("");
-        })
-        .catch((e) => setDataError(e instanceof Error ? e.message : "Mise à jour SCI impossible"));
+      try {
+        const saved = await sbUpsertSci(s);
+        setScis((ss) => ss.map((x) => (x.id === s.id || x.id === saved.id ? { ...s, ...saved } : x)));
+        setDataError("");
+        toast.success("SCI mise à jour en base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Mise à jour SCI impossible";
+        setDataError(msg);
+        toast.error(msg);
+        await reloadPortfolio().catch(() => {});
+        throw e;
+      }
       return;
     }
     setScis((ss) => ss.map((x) => (x.id === s.id ? s : x)));
   };
-  const delSCI = (id: string) => {
+  const delSCI = async (id: string) => {
     if (useSupabase) {
-      setScis((ss) => ss.filter((x) => x.id !== id));
-      setProperties((ps) => ps.filter((p) => p.sciId !== id));
-      sbDeleteSci(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression SCI impossible"));
+      try {
+        await sbDeleteSci(id);
+        setScis((ss) => ss.filter((x) => x.id !== id));
+        setProperties((ps) => ps.filter((p) => p.sciId !== id));
+        toast.success("SCI supprimée de la base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Suppression SCI impossible";
+        setDataError(msg);
+        toast.error(msg);
+        await reloadPortfolio().catch(() => {});
+        throw e;
+      }
       return;
     }
     setScis((ss) => ss.filter((x) => x.id !== id));
   };
-  const addTenant = (t: Tenant) => {
+  const addTenant = async (t: Tenant) => {
     if (useSupabase) {
-      sbUpsertTenant(t)
-        .then((saved) => {
-          setTenants((ts) => [...ts, { ...t, ...saved }]);
-          setDataError("");
-        })
-        .catch((e) => setDataError(e instanceof Error ? e.message : "Enregistrement locataire impossible"));
+      try {
+        const saved = await sbUpsertTenant(t);
+        setTenants((ts) => [...ts, { ...t, ...saved }]);
+        setDataError("");
+        toast.success("Locataire enregistré en base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Enregistrement locataire impossible";
+        setDataError(msg);
+        toast.error(msg);
+        throw e;
+      }
       return;
     }
     setTenants((ts) => [...ts, t]);
   };
-  const updTenant = (t: Tenant) => {
+  const updTenant = async (t: Tenant) => {
     if (useSupabase) {
-      setTenants((ts) => ts.map((x) => (x.id === t.id ? t : x)));
-      sbUpsertTenant(t)
-        .then((saved) => {
-          setTenants((ts) => ts.map((x) => (x.id === t.id || x.id === saved.id ? { ...t, ...saved } : x)));
-          setDataError("");
-        })
-        .catch((e) => setDataError(e instanceof Error ? e.message : "Mise à jour locataire impossible"));
+      try {
+        const saved = await sbUpsertTenant(t);
+        setTenants((ts) => ts.map((x) => (x.id === t.id || x.id === saved.id ? { ...t, ...saved } : x)));
+        setDataError("");
+        toast.success("Locataire mis à jour en base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Mise à jour locataire impossible";
+        setDataError(msg);
+        toast.error(msg);
+        await reloadPortfolio().catch(() => {});
+        throw e;
+      }
       return;
     }
     setTenants((ts) => ts.map((x) => (x.id === t.id ? t : x)));
   };
-  const delTenant = (id: string) => {
+  const delTenant = async (id: string) => {
     if (useSupabase) {
-      setTenants((ts) => ts.filter((x) => x.id !== id));
-      sbDeleteTenant(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression locataire impossible"));
+      try {
+        await sbDeleteTenant(id);
+        setTenants((ts) => ts.filter((x) => x.id !== id));
+        toast.success("Locataire supprimé de la base");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Suppression locataire impossible";
+        setDataError(msg);
+        toast.error(msg);
+        await reloadPortfolio().catch(() => {});
+        throw e;
+      }
       return;
     }
     setTenants((ts) => ts.filter((x) => x.id !== id));
   };
-  const delAlert = (id: string) => {
+  const delAlert = async (id: string) => {
     if (useSupabase) {
-      setAlerts((as) => as.filter((x) => x.id !== id));
-      sbDeleteAlert(id).catch((e) => setDataError(e instanceof Error ? e.message : "Suppression alerte impossible"));
+      try {
+        await sbDeleteAlert(id);
+        setAlerts((as) => as.filter((x) => x.id !== id));
+        toast.success("Alerte supprimée");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Suppression alerte impossible";
+        setDataError(msg);
+        toast.error(msg);
+        throw e;
+      }
       return;
     }
     setAlerts((as) => as.filter((x) => x.id !== id));
@@ -1817,9 +1983,9 @@ function VisionShell() {
                           credit={entry}
                           properties={visibleProperties}
                           onBack={exitEdit}
-                          onSave={(c) => {
+                          onSave={async (c) => {
                             const computed = enrichCredit(c);
-                            updProp({
+                            await updProp({
                               ...p,
                               credit: {
                                 banque: computed.banque,
@@ -1835,7 +2001,7 @@ function VisionShell() {
                             });
                             exitEdit();
                           }}
-                          onDelete={() => { updProp({ ...p, credit: undefined }); afterDelete(); }}
+                          onDelete={async () => { await updProp({ ...p, credit: undefined }); afterDelete(); }}
                         />
                       );
                     }
@@ -1844,8 +2010,8 @@ function VisionShell() {
                         property={p}
                         scis={visibleScis}
                         onBack={exitEdit}
-                        onSave={(next) => { updProp(next); exitEdit(); }}
-                        onDelete={() => { delProp(p.id); afterDelete(); }}
+                        onSave={async (next) => { await updProp(next); exitEdit(); }}
+                        onDelete={async () => { await delProp(p.id); afterDelete(); }}
                       />
                     );
                   }
@@ -1856,8 +2022,8 @@ function VisionShell() {
                       <SCIForm
                         sci={s}
                         onBack={exitEdit}
-                        onSave={(next) => { updSCI(next); exitEdit(); }}
-                        onDelete={() => { delSCI(s.id); afterDelete(); }}
+                        onSave={async (next) => { await updSCI(next); exitEdit(); }}
+                        onDelete={async () => { await delSCI(s.id); afterDelete(); }}
                       />
                     );
                   }
@@ -1870,8 +2036,8 @@ function VisionShell() {
                         properties={visibleProperties}
                         scis={visibleScis}
                         onBack={exitEdit}
-                        onSave={(next) => { updTenant(next); exitEdit(); }}
-                        onDelete={() => { delTenant(t.id); afterDelete(); }}
+                        onSave={async (next) => { await updTenant(next); exitEdit(); }}
+                        onDelete={async () => { await delTenant(t.id); afterDelete(); }}
                       />
                     );
                   }
@@ -1979,6 +2145,7 @@ function VisionShell() {
         onOpenFullPage={openFullPage}
         onPropertyCredit={() => drawerTarget?.kind === "property" && setDrawerTarget({ ...drawerTarget, section: "credit" })}
       />
+      <Toaster position="top-center" richColors closeButton />
     </div>
     </TooltipProvider>
   );
