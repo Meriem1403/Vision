@@ -90,7 +90,9 @@ export async function buildPatrimoineSnapshot(prisma: PrismaClient, opts: Dossie
 
   const patrimoineNet = totalValeur - totalDette;
   const tauxEndettement = totalValeur > 0 ? (totalDette / totalValeur) * 100 : 0;
+  const totalChargesAnnuelles = properties.reduce((s, p) => s + p.taxeFonciere + p.assurance, 0);
   const rendementBrut = totalValeur > 0 ? (totalLoyersAnnuels / totalValeur) * 100 : 0;
+  const rendementNet = totalValeur > 0 ? ((totalLoyersAnnuels - totalChargesAnnuelles) / totalValeur) * 100 : 0;
   const ratioDetteRevenus = totalLoyersAnnuels > 0 ? (totalMensualites * 12) / totalLoyersAnnuels : 0;
 
   const loansByBank = properties
@@ -113,6 +115,7 @@ export async function buildPatrimoineSnapshot(prisma: PrismaClient, opts: Dossie
       patrimoineNet,
       tauxEndettement: Math.round(tauxEndettement * 10) / 10,
       rendementBrut: Math.round(rendementBrut * 100) / 100,
+      rendementNet: Math.round(rendementNet * 100) / 100,
     }),
     ...(includeEndettement && {
       detteTotale: totalDette,

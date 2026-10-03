@@ -35,6 +35,7 @@ interface DossierPayload {
     loyersAnnuels?: number;
     tauxEndettement?: number;
     rendementBrut?: number;
+    rendementNet?: number;
     ratioDetteRevenus?: number;
     repartitionBanques?: Array<{ banque: string; nombreCredits: number; capitalRestant: number; mensualites: number }>;
     demande?: { montant: number; objet: string | null; ltvProjete: number | null; capaciteMensuelleEstimee?: number };
@@ -202,6 +203,7 @@ export function BankPortalView({ user, loans }: BankPortalViewProps) {
                   {selected.payload.synthese.demande.ltvProjete != null && <span>LTV projeté : {selected.payload.synthese.demande.ltvProjete} %</span>}
                   {selected.payload.synthese.tauxEndettement != null && <span>Endettement actuel : {selected.payload.synthese.tauxEndettement} %</span>}
                   {selected.payload.synthese.rendementBrut != null && <span>Rendement brut : {selected.payload.synthese.rendementBrut} %</span>}
+                  {selected.payload.synthese.rendementNet != null && <span>Rendement net : {selected.payload.synthese.rendementNet} %</span>}
                 </div>
               </div>
             )}

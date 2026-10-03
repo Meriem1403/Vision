@@ -98,15 +98,16 @@
       "assurance": 0,
       "surface": 0,
       "credit": {
-        "banque": "LCL",
-        "montantInitial": 42620.35,
-        "taux": 0,
-        "duree": 102,
-        "debut": "2022-11-01",
-        "mensualite": 440.18,
-        "capitalRestant": 25013.15,
-        "finCredit": "2031-05-01",
-        "amortizationModel": "EXCEL_FLAT"
+        "banque": "Crédit Mutuel",
+        "montantInitial": 68000.0,
+        "taux": 1.75,
+        "duree": 185,
+        "debut": "2016-09-01",
+        "assuranceMensuelle": 20.54,
+        "mensualite": 419.64,
+        "capitalRestant": 25242.46,
+        "finCredit": "2032-02-01",
+        "amortizationModel": "RATE_BASED"
       }
     },
     {

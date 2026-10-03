@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mail, MapPin, Pencil, Phone, Shield, AlertTriangle, Trash2 } from "lucide-react";
+import { computePortfolioYield, computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricLabel } from "./MetricWithFormula";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, metricsGridPage, tableScroll, mobileDetailCard, G, lbl } from "./layout";
 import type { AlertItem, Property, SCI, Tenant } from "./entityTypes";
@@ -110,6 +111,12 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
   const cf = props.reduce((s, p) => s + cashFlow(p), 0);
   const loyers = props.reduce((s, p) => s + p.loyer, 0);
   const crd = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
+  const chargesAnnuelles = props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0);
+  const yieldPct = computePortfolioYield({
+    loyersAnnuels: loyers * 12,
+    chargesAnnuelles,
+    patrimoineBrut: sci.valeurEstimee,
+  });
 
   return (
     <>
@@ -118,6 +125,8 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
           { l: "Valeur estimée", v: fmt(sci.valeurEstimee), c: sci.color },
           { l: "Loyers / mois", v: fmt(loyers), c: "#34d399" },
           { l: "Cash-flow", v: `${cf >= 0 ? "+" : ""}${fmt(cf)}`, c: cf >= 0 ? "#34d399" : "#f87171" },
+          { l: "Rendement brut", v: formatYieldPct(yieldPct.brut), c: "#fbbf24" },
+          { l: "Rendement net", v: formatYieldPct(yieldPct.net), c: "#34d399" },
           { l: "Crédit restant", v: fmt(crd), c: "#f87171" },
           { l: "Biens", v: String(props.length), c: "#60a5fa" },
           { l: "Régime", v: sci.type, c: sci.color },
@@ -184,13 +193,15 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
             <table className="w-full min-w-[640px] text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-[var(--v-border-subtle)]">
-                  {["Adresse", "Type", "Valeur", "Loyer", "Cash-flow", "CRD"].map((h) => (
+                  {["Adresse", "Type", "Valeur", "Loyer", "Rdt brut", "Cash-flow", "CRD"].map((h) => (
                     <th key={h} className="text-left py-2 px-3 vision-text-muted uppercase tracking-wider text-xs">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {props.map((p) => (
+                {props.map((p) => {
+                  const y = computePropertyYield(p);
+                  return (
                   <tr
                     key={p.id}
                     onClick={() => onSelectProperty?.(p.id)}
@@ -200,26 +211,32 @@ export function SciDetailPage({ sci, properties, backLabel, onBack, onSelectProp
                     <td className="py-3 px-3 vision-text-muted">{p.type} · {p.surface}m²</td>
                     <td className="py-3 px-3 font-mono vision-info-text">{fmt(p.valeurActuelle)}</td>
                     <td className="py-3 px-3 font-mono">{p.loyer > 0 ? fmt(p.loyer) : "—"}</td>
+                    <td className="py-3 px-3 font-mono text-amber-300/90">{formatYieldPct(y.brut)}</td>
                     <td className="py-3 px-3"><CashChip value={cashFlow(p)} /></td>
                     <td className="py-3 px-3 font-mono vision-negative-text">{p.credit ? fmt(p.credit.capitalRestant) : "—"}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <div className="lg:hidden space-y-2">
-            {props.map((p) => (
+            {props.map((p) => {
+              const y = computePropertyYield(p);
+              return (
               <button key={p.id} type="button" onClick={() => onSelectProperty?.(p.id)} className={mobileDetailCard}>
                 <p className="text-sm font-semibold vision-text break-words">{p.address}</p>
                 <p className="text-xs vision-text-muted mt-0.5">{p.type} · {p.surface}m² · {p.ville}</p>
                 <div className="grid grid-cols-2 gap-2 mt-3 text-xs sm:text-sm">
                   <div><span className="vision-text-muted">Valeur</span><p className="font-mono font-semibold vision-info-text mt-0.5">{fmt(p.valeurActuelle)}</p></div>
                   <div><span className="vision-text-muted">Loyer</span><p className="font-mono vision-text mt-0.5">{p.loyer > 0 ? fmt(p.loyer) : "—"}</p></div>
+                  <div><span className="vision-text-muted">Rdt brut</span><p className="font-mono text-amber-300/90 mt-0.5">{formatYieldPct(y.brut)}</p></div>
                   <div><span className="vision-text-muted">Cash-flow</span><div className="mt-0.5"><CashChip value={cashFlow(p)} /></div></div>
                   <div><span className="vision-text-muted">CRD</span><p className="font-mono vision-negative-text mt-0.5">{p.credit ? fmt(p.credit.capitalRestant) : "—"}</p></div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
