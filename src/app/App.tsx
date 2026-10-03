@@ -161,8 +161,43 @@ const slideV = { hidden: { opacity: 0, height: 0 }, show: { opacity: 1, height: 
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
 
-function GI({ label, className = "", ...p }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; className?: string }) {
-  return <div className={className}>{label && <label className={lbl}>{label}</label>}<input className={inp} {...p} /></div>;
+function GI({ label, className = "", type, ...p }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; className?: string }) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const isDate = type === "date" || type === "datetime-local" || type === "month";
+  const openPicker = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    try {
+      el.showPicker?.();
+    } catch {
+      el.focus();
+      el.click();
+    }
+  };
+  return (
+    <div className={className}>
+      {label && <label className={lbl}>{label}</label>}
+      <div className="relative w-full min-w-0">
+        <input
+          ref={inputRef}
+          type={type}
+          className={`${inp} ${isDate ? "pr-11 vision-input-date-custom" : ""}`}
+          {...p}
+        />
+        {isDate && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Ouvrir le calendrier"
+            onClick={openPicker}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-8 h-8 rounded-lg vision-text-muted hover:vision-accent-text hover:vision-surface transition-colors"
+          >
+            <Calendar className="w-4 h-4 sm:w-[18px] sm:h-[18px]" strokeWidth={1.75} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 function GS({ label, options, className = "", id, ...p }: React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string; options: { value: string; label: string }[]; className?: string }) {
   const selectId = id ?? (label ? `gs-${label.replace(/\s+/g, "-").toLowerCase()}` : undefined);
