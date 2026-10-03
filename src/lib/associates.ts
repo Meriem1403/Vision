@@ -36,3 +36,27 @@ export function sameAssocieName(a: string, b: string): boolean {
   if (!a.trim() || !b.trim()) return false;
   return normalizeAssocieKey(a) === normalizeAssocieKey(b);
 }
+
+/** Variantes de nom du compte connecté (gérant) à exclure des suggestions d’associés. */
+export function gerantNameVariants(user: {
+  name?: string | null;
+  firstName?: string | null;
+  shareholderName?: string | null;
+}): string[] {
+  const out: string[] = [];
+  const push = (v?: string | null) => {
+    const t = v?.trim();
+    if (t) out.push(t);
+  };
+  push(user.name);
+  push(user.firstName);
+  push(user.shareholderName);
+  if (user.firstName?.trim() && user.name?.trim()) {
+    push(`${user.firstName.trim()} ${user.name.trim()}`);
+  }
+  return out;
+}
+
+export function isExcludedAssocieName(name: string, excluded: string[]): boolean {
+  return excluded.some((ex) => sameAssocieName(name, ex));
+}

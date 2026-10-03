@@ -15,7 +15,12 @@ import {
 import { AddressAutocomplete } from "@/app/components/AddressAutocomplete";
 import { AssocieField } from "@/app/components/AssocieField";
 import { BanqueField } from "@/app/components/BanqueField";
-import { resolveAssocieName, sameAssocieName } from "@/lib/associates";
+import {
+  gerantNameVariants,
+  isExcludedAssocieName,
+  resolveAssocieName,
+  sameAssocieName,
+} from "@/lib/associates";
 import { FilterEmpty, FilterSelect, FiltersPanel, SearchBar, matchesSearch } from "@/app/components/ListFilters";
 import { PaginationBar, useCardsGridPageSize, useDuoGridPageSize, usePagination } from "@/app/components/Pagination";
 import { TamPdfImportButton } from "@/app/components/TamPdfImport";
@@ -411,11 +416,19 @@ function normPerson(name: string) {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Quote-part = compte connecté (shareholder_name ou name), uniquement s'il existe dans les SCI. */
+/**
+ * Quote-part personnelle : uniquement si le compte est clairement un associé.
+ * - ASSOCIE : shareholder_name (sinon name) s’il figure dans les SCI
+ * - GERANT : seulement si shareholder_name est renseigné (le gérant n’est pas associé « par défaut »)
+ */
 function personalShareName(user: AuthUser | null | undefined, scis: SCI[]): string | null {
   if (!user || user.role === "BANQUE") return null;
+  if (user.role === "GERANT" && !user.shareholderName?.trim()) return null;
   const known = [...new Set(scis.flatMap((s) => s.associes.map((a) => a.name)))];
-  const candidates = [user.shareholderName, user.name].filter(Boolean) as string[];
+  const candidates =
+    user.role === "GERANT"
+      ? [user.shareholderName].filter(Boolean) as string[]
+      : [user.shareholderName, user.name].filter(Boolean) as string[];
   for (const c of candidates) {
     const match = known.find((k) => normPerson(k) === normPerson(c));
     if (match) return match;
@@ -982,6 +995,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
 function SCIForm({
   sci,
   existingAssociates = [],
+  excludeAssociateNames = [],
   onSave,
   onBack,
   onDelete,
@@ -989,17 +1003,30 @@ function SCIForm({
   sci: SCI | null;
   /** Associés déjà présents sur le patrimoine (autres SCI) */
   existingAssociates?: string[];
+  /** Noms du gérant / comptes à ne pas proposer comme associés */
+  excludeAssociateNames?: string[];
   onSave: (s: SCI) => void | Promise<void>;
   onBack: () => void;
   onDelete?: () => void | Promise<void>;
 }) {
   const isEdit = !!sci;
-  const [f, setF] = useState<SCI>(sci ?? { id: uid(), name: "", shortName: "", type: "IR", creation: "", valeurEstimee: 0, associes: [{ name: "", parts: 50 }, { name: "", parts: 50 }], color: "#60a5fa", gradient: "from-blue-500/20 to-transparent" });
+  const [f, setF] = useState<SCI>(sci ?? {
+    id: uid(),
+    name: "",
+    shortName: "",
+    type: "IR",
+    creation: "",
+    valeurEstimee: 0,
+    // Aucun associé par défaut — le gérant ajoute ceux qu’il veut
+    associes: [],
+    color: "#60a5fa",
+    gradient: "from-blue-500/20 to-transparent",
+  });
   const updF = (k: keyof SCI, v: string | number) => setF((s) => ({ ...s, [k]: v }));
-  const knownNames = useMemo(
-    () => [...existingAssociates, ...f.associes.map((a) => a.name)],
-    [existingAssociates, f.associes],
-  );
+  const knownNames = useMemo(() => {
+    const pool = [...existingAssociates, ...f.associes.map((a) => a.name)];
+    return pool.filter((n) => n.trim() && !isExcludedAssocieName(n, excludeAssociateNames));
+  }, [existingAssociates, f.associes, excludeAssociateNames]);
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
       <FormHdr
@@ -1034,6 +1061,11 @@ function SCIForm({
       </GSec>
       <GSec title="Associés">
         <div className="space-y-3">
+          {f.associes.length === 0 && (
+            <p className="text-xs vision-text-muted">
+              Aucun associé pour l’instant. Ajoutez les actionnaires de la SCI (le compte gérant n’est pas ajouté automatiquement).
+            </p>
+          )}
           {f.associes.map((a, i) => (
             <div key={i} className="flex gap-2 sm:gap-3 items-end">
               <AssocieField
@@ -1068,7 +1100,25 @@ function SCIForm({
   );
 }
 
-function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onOpenFullPage }: { scis: SCI[]; properties: Property[]; onAdd: (s: SCI) => void | Promise<void>; onUpdate: (s: SCI) => void | Promise<void>; onDelete: (id: string) => void | Promise<void>; onSelectSci: (id: string) => void; onOpenFullPage: (id: string) => void }) {
+function SCIView({
+  scis,
+  properties,
+  excludeAssociateNames = [],
+  onAdd,
+  onUpdate,
+  onDelete,
+  onSelectSci,
+  onOpenFullPage,
+}: {
+  scis: SCI[];
+  properties: Property[];
+  excludeAssociateNames?: string[];
+  onAdd: (s: SCI) => void | Promise<void>;
+  onUpdate: (s: SCI) => void | Promise<void>;
+  onDelete: (id: string) => void | Promise<void>;
+  onSelectSci: (id: string) => void;
+  onOpenFullPage: (id: string) => void;
+}) {
   const [mode, setMode] = useState<CrudMode>("list");
   const [editing, setEditing] = useState<SCI | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
@@ -1088,6 +1138,7 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
       <SCIForm
         sci={editing}
         existingAssociates={scis.flatMap((s) => s.associes.map((a) => a.name))}
+        excludeAssociateNames={excludeAssociateNames}
         onBack={() => { setMode("list"); setEditing(null); }}
         onSave={async (s) => {
           if (mode === "create") await onAdd(s);
@@ -2550,6 +2601,7 @@ function VisionShell() {
                       <SCIForm
                         sci={s}
                         existingAssociates={visibleScis.flatMap((x) => x.associes.map((a) => a.name))}
+                        excludeAssociateNames={authUser.role === "GERANT" ? gerantNameVariants(authUser) : []}
                         onBack={exitEdit}
                         onSave={async (next) => { await updSCI(next); exitEdit(); }}
                         onDelete={async () => { await delSCI(s.id); afterDelete(); }}
@@ -2613,7 +2665,18 @@ function VisionShell() {
                 />
               )}
               {view === "dashboard" && <DashboardView properties={segmentProperties} scis={segmentScis} user={authUser} onSelectProperty={(id) => openPropertyDrawer(id)} />}
-              {view === "sci" && <SCIView scis={segmentScis} properties={segmentProperties} onAdd={canManageData(authUser) ? addSCI : () => {}} onUpdate={canManageData(authUser) ? updSCI : () => {}} onDelete={canManageData(authUser) ? delSCI : () => {}} onSelectSci={(id) => openDrawer({ kind: "sci", id })} onOpenFullPage={(id) => openFullPage({ kind: "sci", id })} />}
+              {view === "sci" && (
+                <SCIView
+                  scis={segmentScis}
+                  properties={segmentProperties}
+                  excludeAssociateNames={authUser.role === "GERANT" ? gerantNameVariants(authUser) : []}
+                  onAdd={canManageData(authUser) ? addSCI : () => {}}
+                  onUpdate={canManageData(authUser) ? updSCI : () => {}}
+                  onDelete={canManageData(authUser) ? delSCI : () => {}}
+                  onSelectSci={(id) => openDrawer({ kind: "sci", id })}
+                  onOpenFullPage={(id) => openFullPage({ kind: "sci", id })}
+                />
+              )}
               {view === "biens" && <BiensView properties={segmentProperties} scis={segmentScis} onAdd={canManageData(authUser) ? addProp : () => {}} onUpdate={canManageData(authUser) ? updProp : () => {}} onDelete={canManageData(authUser) ? delProp : () => {}} onSelectProperty={(id) => openPropertyDrawer(id)} onOpenFullPage={(id) => openPropertyFullPage(id)} />}
               {view === "credits" && <CreditsView properties={segmentProperties} scis={segmentScis} onUpdateProperty={canManageData(authUser) ? updProp : () => {}} onSelectCredit={(id) => openPropertyDrawer(id, true)} onOpenFullPage={(id) => openPropertyFullPage(id, "credit")} />}
               {view === "location" && canAccessView(authUser, "location") && <LocationView tenants={segmentTenants} properties={segmentProperties} scis={segmentScis} onAdd={canManageData(authUser) ? addTenant : () => {}} onUpdate={canManageData(authUser) ? updTenant : () => {}} onDelete={canManageData(authUser) ? delTenant : () => {}} onSelectTenant={(id) => openDrawer({ kind: "tenant", id })} onOpenFullPage={(id) => openFullPage({ kind: "tenant", id })} />}
