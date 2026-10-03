@@ -23,8 +23,6 @@ import { AddressAutocomplete } from "@/app/components/AddressAutocomplete";
 import { AssocieField } from "@/app/components/AssocieField";
 import { BanqueField } from "@/app/components/BanqueField";
 import {
-  gerantNameVariants,
-  isExcludedAssocieName,
   resolveAssocieName,
   sameAssocieName,
 } from "@/lib/associates";
@@ -448,18 +446,13 @@ function normPerson(name: string) {
 }
 
 /**
- * Quote-part personnelle : uniquement si le compte est clairement un associé.
- * - ASSOCIE : shareholder_name (sinon name) s’il figure dans les SCI
- * - GERANT : seulement si shareholder_name est renseigné (le gérant n’est pas associé « par défaut »)
+ * Quote-part personnelle : uniquement si le nom figure dans les associés des SCI.
+ * Pas de part « fantôme » pour le gérant — s’il est associé, il doit être dans la liste.
  */
 function personalShareName(user: AuthUser | null | undefined, scis: SCI[]): string | null {
   if (!user || user.role === "BANQUE") return null;
-  if (user.role === "GERANT" && !user.shareholderName?.trim()) return null;
   const known = [...new Set(scis.flatMap((s) => s.associes.map((a) => a.name)))];
-  const candidates =
-    user.role === "GERANT"
-      ? [user.shareholderName].filter(Boolean) as string[]
-      : [user.shareholderName, user.name].filter(Boolean) as string[];
+  const candidates = [user.shareholderName, user.name].filter(Boolean) as string[];
   for (const c of candidates) {
     const match = known.find((k) => normPerson(k) === normPerson(c));
     if (match) return match;
@@ -1074,7 +1067,7 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
 function SCIForm({
   sci,
   existingAssociates = [],
-  excludeAssociateNames = [],
+  defaultAssociateName,
   onSave,
   onBack,
   onDelete,
@@ -1082,13 +1075,14 @@ function SCIForm({
   sci: SCI | null;
   /** Associés déjà présents sur le patrimoine (autres SCI) */
   existingAssociates?: string[];
-  /** Noms du gérant / comptes à ne pas proposer comme associés */
-  excludeAssociateNames?: string[];
+  /** Nom prérempli à la création (ex. gérant déjà associé en base) */
+  defaultAssociateName?: string | null;
   onSave: (s: SCI) => void | Promise<void>;
   onBack: () => void;
   onDelete?: () => void | Promise<void>;
 }) {
   const isEdit = !!sci;
+  const defaultName = defaultAssociateName?.trim() ?? "";
   const [f, setF] = useState<SCI>(sci ?? {
     id: uid(),
     name: "",
@@ -1096,16 +1090,20 @@ function SCIForm({
     type: "IR",
     creation: "",
     valeurEstimee: 0,
-    // Aucun associé par défaut — le gérant ajoute ceux qu’il veut
-    associes: [],
+    // Le gérant (souvent déjà associé) apparaît dès la création — pas de part fantôme hors liste
+    associes: defaultName ? [{ name: defaultName, parts: 0 }] : [],
     color: "#60a5fa",
     gradient: "from-blue-500/20 to-transparent",
   });
   const updF = (k: keyof SCI, v: string | number) => setF((s) => ({ ...s, [k]: v }));
   const knownNames = useMemo(() => {
-    const pool = [...existingAssociates, ...f.associes.map((a) => a.name)];
-    return pool.filter((n) => n.trim() && !isExcludedAssocieName(n, excludeAssociateNames));
-  }, [existingAssociates, f.associes, excludeAssociateNames]);
+    const pool = [
+      ...existingAssociates,
+      ...f.associes.map((a) => a.name),
+      ...(defaultName ? [defaultName] : []),
+    ];
+    return [...new Set(pool.map((n) => n.trim()).filter(Boolean))];
+  }, [existingAssociates, f.associes, defaultName]);
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
       <FormHdr
@@ -1142,7 +1140,12 @@ function SCIForm({
         <div className="space-y-3">
           {f.associes.length === 0 && (
             <p className="text-xs vision-text-muted">
-              Aucun associé pour l’instant. Ajoutez les actionnaires de la SCI (le compte gérant n’est pas ajouté automatiquement).
+              Aucun associé pour l’instant. Ajoutez les actionnaires de la SCI (vous y compris si vous avez des parts).
+            </p>
+          )}
+          {!isEdit && defaultName && f.associes.some((a) => sameAssocieName(a.name, defaultName)) && (
+            <p className="text-xs vision-text-muted">
+              Vous êtes prérempli comme associé — indiquez votre % de parts (évite les doublons avec une quote-part implicite).
             </p>
           )}
           {f.associes.map((a, i) => (
@@ -1182,7 +1185,7 @@ function SCIForm({
 function SCIView({
   scis,
   properties,
-  excludeAssociateNames = [],
+  defaultAssociateName,
   onAdd,
   onUpdate,
   onDelete,
@@ -1191,7 +1194,8 @@ function SCIView({
 }: {
   scis: SCI[];
   properties: Property[];
-  excludeAssociateNames?: string[];
+  /** Préremplit le gérant comme associé à la création d’une SCI */
+  defaultAssociateName?: string | null;
   onAdd: (s: SCI) => void | Promise<void>;
   onUpdate: (s: SCI) => void | Promise<void>;
   onDelete: (id: string) => void | Promise<void>;
@@ -1217,7 +1221,7 @@ function SCIView({
       <SCIForm
         sci={editing}
         existingAssociates={scis.flatMap((s) => s.associes.map((a) => a.name))}
-        excludeAssociateNames={excludeAssociateNames}
+        defaultAssociateName={defaultAssociateName}
         onBack={() => { setMode("list"); setEditing(null); }}
         onSave={async (s) => {
           if (mode === "create") await onAdd(s);
@@ -2768,7 +2772,7 @@ function VisionShell() {
                       <SCIForm
                         sci={s}
                         existingAssociates={visibleScis.flatMap((x) => x.associes.map((a) => a.name))}
-                        excludeAssociateNames={authUser.role === "GERANT" ? gerantNameVariants(authUser) : []}
+                        defaultAssociateName={authUser.role === "GERANT" ? authUser.name : null}
                         onBack={exitEdit}
                         onSave={async (next) => { await updSCI(next); exitEdit(); }}
                         onDelete={async () => { await delSCI(s.id); afterDelete(); }}
@@ -2836,7 +2840,7 @@ function VisionShell() {
                 <SCIView
                   scis={segmentScis}
                   properties={segmentProperties}
-                  excludeAssociateNames={authUser.role === "GERANT" ? gerantNameVariants(authUser) : []}
+                  defaultAssociateName={authUser.role === "GERANT" ? authUser.name : null}
                   onAdd={canManageData(authUser) ? addSCI : () => {}}
                   onUpdate={canManageData(authUser) ? updSCI : () => {}}
                   onDelete={canManageData(authUser) ? delSCI : () => {}}
