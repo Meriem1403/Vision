@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { buildAmortizationSchedule, computeLoanSummary, type LoanInput } from "@/lib/loanCalculator";
+import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricCard } from "./MetricWithFormula";
 import { lbl } from "./layout";
@@ -34,6 +35,8 @@ export interface PropertyShape {
   loyer: number;
   taxeFonciere: number;
   assurance: number;
+  gestionDeleguee?: boolean;
+  honorairesGestionPct?: number;
   credit?: CreditShape;
 }
 
@@ -50,7 +53,8 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
 }) {
   const cr = property.prixAchat + property.travaux + property.fraisNotaire;
   const pv = property.valeurActuelle - cr;
-  const cf = Math.round(property.loyer - (property.credit?.mensualite ?? 0) - property.taxeFonciere / 12);
+  const cf = cashFlowMensuel(property, false);
+  const honoraires = honorairesGestionMensuel(property);
   const yieldPct = computePropertyYield(property);
   const loanInput: LoanInput | null = property.credit ? {
     montantInitial: property.credit.montantInitial,
@@ -81,6 +85,13 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
         <MetricCard label="Rendement net" value={formatYieldPct(yieldPct.net)} color="#34d399" />
         <MetricCard label="Taxe foncière / an" value={fmt(property.taxeFonciere)} />
         <MetricCard label="Assurance / an" value={fmt(property.assurance)} />
+        <MetricCard
+          label="Gestion locative"
+          value={property.gestionDeleguee ? `Déléguée · ${property.honorairesGestionPct ?? 0} %` : "Directe"}
+        />
+        {property.gestionDeleguee && (
+          <MetricCard label="Honoraires / mois" value={fmtD(honoraires)} color="#fbbf24" />
+        )}
       </div>
 
       <Section title="Acquisition">
@@ -132,7 +143,7 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
   };
   const summary = computeLoanSummary(loanInput);
   const schedule = buildAmortizationSchedule(loanInput);
-  const cf = Math.round(property.loyer - summary.mensualite - property.taxeFonciere / 12);
+  const cf = cashFlowMensuel({ ...property, credit: { mensualite: summary.mensualite } }, false);
 
   const today = useMemo(() => {
     const n = new Date();

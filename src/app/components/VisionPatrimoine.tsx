@@ -39,7 +39,7 @@ interface Credit {
   banque?: string;
   finCredit?: string | null;
 }
-interface Property { id: string; sciId: string; address: string; type: string; lots: number; loyer: number; taxeFonciere: number; valeurActuelle: number; credit?: Credit }
+interface Property { id: string; sciId: string; address: string; type: string; lots: number; loyer: number; taxeFonciere: number; valeurActuelle: number; gestionDeleguee?: boolean; honorairesGestionPct?: number; credit?: Credit }
 interface SCI {
   id: string;
   name: string;
@@ -51,7 +51,10 @@ interface SCI {
 }
 
 function excelCash(p: Property) {
-  return Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12);
+  const honoraires = p.gestionDeleguee && p.honorairesGestionPct
+    ? (p.loyer * p.honorairesGestionPct) / 100
+    : 0;
+  return Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - honoraires);
 }
 
 function finCreditLabel(c: Credit) {

@@ -11,13 +11,21 @@
 1. [supabase.com](https://supabase.com) → New project
 2. Noter **Project URL** et **anon public key** (Settings → API)
 
-## 2. Schéma + données Excel + RLS
+## 2. Schéma + données initiales + RLS
 
-Dans **SQL Editor**, exécuter dans cet ordre :
+Dans **SQL Editor**, exécuter dans cet ordre **une seule fois** (projet neuf) :
 
 1. `supabase/schema.sql`
-2. `supabase/seed.sql` ← biens / SCI / crédits depuis `VISION PATRIMOINE 030425.xlsx`
+2. `supabase/seed.sql` ← jeu initial (TRUNCATE : efface tout puis réinsère)
 3. `supabase/rls.sql` ← accès par rôle (gérant / associé / banque)
+
+⚠️ **Ne jamais rejouer `seed.sql` sur une base déjà en prod** — ça écrase biens, locataires, dossiers, crédits, etc.
+
+Pour aligner les crédits sur les TAM PDF sans toucher le reste :
+→ exécuter uniquement `supabase/fix_loans_from_tam.sql`
+
+Pour ajouter la gestion locative déléguée (colonnes) sans toucher aux données :
+→ exécuter `supabase/migrate_gestion_locative.sql`
 
 ## 3. Créer les utilisateurs Auth
 

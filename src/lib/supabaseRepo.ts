@@ -167,6 +167,8 @@ export interface PropertyRow {
   loyer: number;
   taxeFonciere: number;
   assurance: number;
+  gestionDeleguee?: boolean;
+  honorairesGestionPct?: number;
   credit?: {
     banque: string;
     montantInitial: number;
@@ -263,6 +265,8 @@ export async function fetchPortfolio(): Promise<{
       loyer: Number(p.loyer),
       taxeFonciere: Number(p.taxe_fonciere),
       assurance: Number(p.assurance),
+      gestionDeleguee: Boolean(p.gestion_deleguee),
+      honorairesGestionPct: Number(p.honoraires_gestion_pct ?? 0),
       credit: loan
         ? {
             banque: loan.banque,
@@ -406,6 +410,8 @@ export async function upsertProperty(property: PropertyRow): Promise<PropertyRow
     loyer: property.loyer,
     taxe_fonciere: property.taxeFonciere,
     assurance: property.assurance,
+    gestion_deleguee: Boolean(property.gestionDeleguee),
+    honoraires_gestion_pct: Number(property.honorairesGestionPct) || 0,
     updated_at: new Date().toISOString(),
   };
 

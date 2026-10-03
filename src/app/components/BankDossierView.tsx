@@ -9,6 +9,7 @@ import type { AuthUser } from "@/lib/auth";
 import { getStoredToken } from "@/lib/auth";
 import { listBankOptions, resolveBankName } from "@/lib/banks";
 import { buildDossierPdfBlob, downloadBlob, slugFilename } from "@/lib/dossierPdf";
+import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { createDossier, deleteDossier, fetchDossier, fetchDossiers, sendDossier } from "@/lib/supabaseRepo";
 import { BanqueField } from "./BanqueField";
@@ -37,6 +38,8 @@ interface PropOpt {
   loyer: number;
   taxeFonciere: number;
   assurance: number;
+  gestionDeleguee?: boolean;
+  honorairesGestionPct?: number;
   credit?: { banque: string; capitalRestant: number; mensualite: number; assuranceMensuelle?: number; montantInitial: number; taux: number };
 }
 
@@ -65,7 +68,7 @@ function buildPayload(
   const totalDette = props.reduce((s, p) => s + (p.credit?.capitalRestant ?? 0), 0);
   const totalLoyers = props.reduce((s, p) => s + p.loyer * 12, 0);
   const totalMens = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0) + (p.credit?.assuranceMensuelle ?? 0), 0);
-  const cash = props.reduce((s, p) => s + Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - p.assurance / 12), 0);
+  const cash = props.reduce((s, p) => s + cashFlowMensuel(p, true), 0);
 
   const byBank: Record<string, { count: number; crd: number; mensualites: number }> = {};
   for (const p of props) {
@@ -88,7 +91,7 @@ function buildPayload(
         tauxEndettement: totalValeur > 0 ? Math.round((totalDette / totalValeur) * 1000) / 10 : 0,
         rendementBrut: totalValeur > 0 ? Math.round((totalLoyers / totalValeur) * 10000) / 100 : 0,
         rendementNet: totalValeur > 0
-          ? Math.round(((totalLoyers - props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0), 0)) / totalValeur) * 10000) / 100
+          ? Math.round(((totalLoyers - props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12, 0)) / totalValeur) * 10000) / 100
           : 0,
       }),
       ...(opts.includeEndettement && {
@@ -125,7 +128,7 @@ function buildPayload(
       type: p.type,
       valeurActuelle: p.valeurActuelle,
       loyer: p.loyer,
-      cashMensuel: Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - p.assurance / 12),
+      cashMensuel: cashFlowMensuel(p, true),
       credit: p.credit
         ? { banque: p.credit.banque, capitalRestant: p.credit.capitalRestant, mensualite: p.credit.mensualite, taux: p.credit.taux }
         : null,

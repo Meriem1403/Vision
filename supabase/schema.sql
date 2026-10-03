@@ -62,6 +62,8 @@ create table properties (
   loyer numeric not null default 0,
   taxe_fonciere numeric not null default 0,
   assurance numeric not null default 0,
+  gestion_deleguee boolean not null default false,
+  honoraires_gestion_pct numeric not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
