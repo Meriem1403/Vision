@@ -369,11 +369,12 @@ export async function upsertSci(sci: SciRow): Promise<SciRow> {
     entityId = data.id as string;
   }
 
-  if (sci.associes.length) {
+  const associes = sci.associes.filter((a) => a.name.trim().length > 0);
+  if (associes.length) {
     const { error } = await client.from("shareholders").insert(
-      sci.associes.map((a) => ({
+      associes.map((a) => ({
         entity_id: entityId,
-        name: a.name,
+        name: a.name.trim(),
         parts: a.parts,
       })),
     );

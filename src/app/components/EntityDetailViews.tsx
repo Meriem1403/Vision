@@ -143,7 +143,7 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
       <div className={`${G} p-4 mt-4`}>
         <p className={lbl}>Associés</p>
         <div className="space-y-2">
-          {sci.associes.map((a) => (
+          {sci.associes.filter((a) => a.name.trim()).map((a) => (
             <div key={a.name} className="flex items-center justify-between gap-3">
               <span className="text-sm vision-text">{a.name}</span>
               <span className="font-mono font-bold text-sm" style={{ color: sci.color }}>{a.parts}%</span>

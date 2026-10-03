@@ -983,7 +983,16 @@ function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (
   const updF = (k: keyof SCI, v: string | number) => setF((s) => ({ ...s, [k]: v }));
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
-      <FormHdr title={isEdit ? `Modifier · ${f.name}` : "Nouvelle SCI"} onBack={onBack} onDelete={onDelete} onSave={() => onSave(f)} isEdit={isEdit} />
+      <FormHdr
+        title={isEdit ? `Modifier · ${f.name}` : "Nouvelle SCI"}
+        onBack={onBack}
+        onDelete={onDelete}
+        onSave={() => onSave({
+          ...f,
+          associes: f.associes.filter((a) => a.name.trim().length > 0),
+        })}
+        isEdit={isEdit}
+      />
       <GSec title="Identité">
         <div className="space-y-3">
           <GI label="Nom complet" placeholder="SCI IR DUPONT" value={f.name} onChange={(e) => updF("name", e.target.value)} />
@@ -998,12 +1007,24 @@ function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (
       <GSec title="Associés">
         <div className="space-y-3">
           {f.associes.map((a, i) => (
-            <div key={i} className="flex gap-3 items-end">
-              <GI placeholder={`Associé ${i + 1}`} value={a.name} onChange={(e) => setF((s) => ({ ...s, associes: s.associes.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} className="flex-1" />
-              <div className="flex items-end gap-2"><GI type="number" placeholder="50" value={a.parts || ""} onChange={(e) => setF((s) => ({ ...s, associes: s.associes.map((x, j) => j === i ? { ...x, parts: +e.target.value } : x) }))} className="w-20" /><span className="vision-text-muted text-sm pb-3">%</span></div>
+            <div key={i} className="flex gap-2 sm:gap-3 items-end">
+              <GI placeholder={`Associé ${i + 1}`} value={a.name} onChange={(e) => setF((s) => ({ ...s, associes: s.associes.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} className="flex-1 min-w-0" />
+              <div className="flex items-end gap-2 shrink-0">
+                <GI type="number" placeholder="50" value={a.parts || ""} onChange={(e) => setF((s) => ({ ...s, associes: s.associes.map((x, j) => j === i ? { ...x, parts: +e.target.value } : x) }))} className="w-20" />
+                <span className="vision-text-muted text-sm pb-3">%</span>
+              </div>
+              <button
+                type="button"
+                title="Retirer cet associé"
+                aria-label="Retirer cet associé"
+                onClick={() => setF((s) => ({ ...s, associes: s.associes.filter((_, j) => j !== i) }))}
+                className="mb-0.5 w-10 h-10 rounded-xl border border-red-400/20 bg-red-500/10 hover:bg-red-500/25 flex items-center justify-center vision-negative-text shrink-0 transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           ))}
-          <button onClick={() => setF((s) => ({ ...s, associes: [...s.associes, { name: "", parts: 0 }] }))} className={btnG}><Plus size={13} />Associé</button>
+          <button type="button" onClick={() => setF((s) => ({ ...s, associes: [...s.associes, { name: "", parts: 0 }] }))} className={btnG}><Plus size={13} />Associé</button>
         </div>
       </GSec>
     </motion.div>
@@ -1086,7 +1107,7 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
               </div>
               <div className="px-5 py-4 border-t border-[var(--v-border-subtle)]">
                 <p className={`${lbl} mb-3`}>Associés</p>
-                <div className="space-y-2.5">{sci.associes.map((a) => <div key={a.name} className="flex items-center gap-3"><Ava initiales={a.name.split(" ").map((n) => n[0]).join("")} color={sci.color} size={28} /><span className="text-xs vision-text-muted flex-1 truncate">{a.name}</span><span className="text-sm font-bold font-mono flex-shrink-0" style={{ color: sci.color }}>{a.parts}%</span></div>)}</div>
+                <div className="space-y-2.5">{sci.associes.filter((a) => a.name.trim()).map((a) => <div key={a.name} className="flex items-center gap-3"><Ava initiales={a.name.split(" ").map((n) => n[0]).join("")} color={sci.color} size={28} /><span className="text-xs vision-text-muted flex-1 truncate">{a.name}</span><span className="text-sm font-bold font-mono flex-shrink-0" style={{ color: sci.color }}>{a.parts}%</span></div>)}</div>
               </div>
               {props.length > 0 && <div className="px-5 pb-4 border-t border-[var(--v-border-subtle)]"><p className={`${lbl} my-3`}>{props.length} bien{props.length > 1 ? "s" : ""}</p><div className="space-y-1.5">{props.map((p) => <motion.div key={p.id} whileHover={{ x: 3 }} className="flex items-center justify-between py-2 px-3 rounded-xl vision-surface hover:vision-surface transition-colors"><div><p className="text-xs font-medium vision-text">{p.address}</p><p className="text-xs vision-text-muted">{p.type} · {p.surface}m²</p></div><CashChip value={cashFlow(p)} /></motion.div>)}</div></div>}
               <p className="px-5 pb-2 text-xs vision-text-muted flex items-center gap-1"><Eye size={14} /> Cliquer pour l&apos;aperçu</p>
