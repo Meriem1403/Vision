@@ -9,6 +9,8 @@ export interface Credit {
   assuranceMensuelle?: number;
   mensualite: number;
   capitalRestant: number;
+  finCredit?: string | null;
+  amortizationModel?: string | null;
 }
 
 export interface Property {

@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mail, MapPin, Pencil, Phone, Shield, AlertTriangle, Trash2 } from "lucide-react";
 import { formatBailDate, leaseProgressPct } from "@/lib/bailDates";
 import { formatCreationDisplay } from "@/lib/creationDate";
-import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
+import { cashFlowMensuel, comptaMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { computePortfolioYield, computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricLabel } from "./MetricWithFormula";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, metricsGridPage, tableScroll, mobileDetailCard, G, lbl } from "./layout";
@@ -374,12 +374,28 @@ export function AlertDetailPage({ alert, backLabel, onBack, onDelete }: { alert:
 
 export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { sci: SCI; properties: Property[]; variant?: "drawer" | "page" }) {
   const props = properties.filter((p) => p.sciId === sci.id);
-  const loyers = props.reduce((s, p) => s + p.loyer, 0);
-  const credits = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0), 0);
-  const taxes = props.reduce((s, p) => s + p.taxeFonciere / 12, 0);
-  const assurances = props.reduce((s, p) => s + p.assurance / 12, 0);
-  const res = loyers - credits - taxes - assurances;
-  const maxV = Math.max(loyers, credits + taxes + assurances, 1);
+  const totals = props.reduce(
+    (acc, p) => {
+      const m = comptaMensuel(p);
+      acc.loyers += m.loyers;
+      acc.credits += m.credits;
+      acc.taxes += m.taxes;
+      acc.assurances += m.assurances;
+      acc.honoraires += m.honoraires;
+      acc.result += m.result;
+      return acc;
+    },
+    { loyers: 0, credits: 0, taxes: 0, assurances: 0, honoraires: 0, result: 0 },
+  );
+  const { loyers, credits, taxes, assurances, honoraires, result: res } = totals;
+  const maxV = Math.max(loyers, credits + taxes + assurances + honoraires, 1);
+  const rows = [
+    { label: "Loyers", value: loyers, color: "#34d399" },
+    { label: "Crédits", value: credits, color: "#f87171" },
+    { label: "Taxe foncière", value: taxes, color: "#fbbf24" },
+    { label: "Assurances", value: assurances, color: "#94a3b8" },
+    ...(honoraires > 0 ? [{ label: "Honoraires gestion", value: honoraires, color: "#a78bfa" }] : []),
+  ];
 
   return (
     <>
@@ -387,12 +403,7 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
         <p className="text-sm vision-text-muted break-words">{sci.name}</p>
         <p className="text-lg sm:text-xl font-bold font-mono flex-shrink-0" style={{ color: res >= 0 ? "#34d399" : "#f87171" }}>{res >= 0 ? "+" : ""}{fmt(res)}<span className="text-sm font-normal vision-text-muted">/mois</span></p>
       </div>
-      {[
-        { label: "Loyers", value: loyers, color: "#34d399" },
-        { label: "Crédits", value: credits, color: "#f87171" },
-        { label: "Taxe foncière", value: taxes, color: "#fbbf24" },
-        { label: "Assurances", value: assurances, color: "#94a3b8" },
-      ].map((row) => (
+      {rows.map((row) => (
         <div key={row.label} className="mb-3">
           <div className="flex justify-between mb-1"><p className="text-xs vision-text-muted">{row.label}</p><p className="text-xs font-mono font-bold" style={{ color: row.color }}>{fmt(row.value)}</p></div>
           <GBar pct={(row.value / maxV) * 100} color={row.color} />
@@ -406,21 +417,21 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
               <table className="w-full min-w-[520px] text-xs">
                 <thead>
                   <tr className="border-b border-[var(--v-border-subtle)] vision-text-muted uppercase text-xs">
-                    {["Bien", "Loyer", "Crédit", "Taxe/mois", "Cash-flow"].map((h) => (
+                    {["Bien", "Loyer", "Crédit", "Taxe/mois", "Résultat"].map((h) => (
                       <th key={h} className="text-left py-2 px-2 font-bold">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {props.map((p) => {
-                    const cf = cashFlow(p);
+                    const m = comptaMensuel(p);
                     return (
                       <tr key={p.id} className="border-b border-[var(--v-border-subtle)]">
                         <td className="py-2 px-2"><p className="vision-text">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p></td>
                         <td className="py-2 px-2 font-mono">{fmt(p.loyer)}</td>
                         <td className="py-2 px-2 font-mono vision-negative-text">{fmt(p.credit?.mensualite ?? 0)}</td>
                         <td className="py-2 px-2 font-mono">{fmt(p.taxeFonciere / 12)}</td>
-                        <td className="py-2 px-2"><CashChip value={cf} /></td>
+                        <td className="py-2 px-2"><CashChip value={m.result} /></td>
                       </tr>
                     );
                   })}
@@ -430,7 +441,7 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
           </div>
           <div className="md:hidden space-y-2">
             {props.map((p) => {
-              const cf = cashFlow(p);
+              const m = comptaMensuel(p);
               return (
                 <div key={p.id} className={`${mobileDetailCard} cursor-default active:scale-100`}>
                   <p className="text-sm font-semibold vision-text break-words">{p.address}</p>
@@ -438,7 +449,7 @@ export function ComptaDetailContent({ sci, properties, variant = "drawer" }: { s
                     <div><span className="vision-text-muted">Loyer</span><p className="font-mono vision-text mt-0.5">{fmt(p.loyer)}</p></div>
                     <div><span className="vision-text-muted">Crédit</span><p className="font-mono vision-negative-text mt-0.5">{fmt(p.credit?.mensualite ?? 0)}</p></div>
                     <div><span className="vision-text-muted">Taxe/mois</span><p className="font-mono mt-0.5">{fmt(p.taxeFonciere / 12)}</p></div>
-                    <div><span className="vision-text-muted">Cash-flow</span><div className="mt-0.5"><CashChip value={cf} /></div></div>
+                    <div><span className="vision-text-muted">Résultat</span><div className="mt-0.5"><CashChip value={m.result} /></div></div>
                   </div>
                 </div>
               );

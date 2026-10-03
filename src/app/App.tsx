@@ -4,8 +4,15 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router"
 import { toast, Toaster } from "sonner";
 import { formatBailDate, leaseProgressPct, syncTenantBailTs } from "@/lib/bailDates";
 import { creationToInputValue, formatCreationDisplay } from "@/lib/creationDate";
-import { computeLoanSummary, enrichCredit, patchCreditField } from "@/lib/loanCalculator";
-import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
+import {
+  computeLoanSummary,
+  enrichCredit,
+  isInterestOnlyModel,
+  parseLocalDate,
+  patchCreditField,
+} from "@/lib/loanCalculator";
+import { buildPatrimoineEvolution, patrimoineRangeLabel } from "@/lib/patrimoineEvolution";
+import { cashFlowMensuel, comptaMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { computePortfolioYield, formatYieldPct } from "@/lib/propertyYield";
 import { api, isApiAvailable } from "@/lib/api";
 import {
@@ -86,7 +93,18 @@ import {
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
 interface Associe { name: string; parts: number }
-interface Credit { banque: string; montantInitial: number; taux: number; duree: number; debut: string; assuranceMensuelle?: number; mensualite: number; capitalRestant: number; finCredit?: string | null }
+interface Credit {
+  banque: string;
+  montantInitial: number;
+  taux: number;
+  duree: number;
+  debut: string;
+  assuranceMensuelle?: number;
+  mensualite: number;
+  capitalRestant: number;
+  finCredit?: string | null;
+  amortizationModel?: string | null;
+}
 interface Property { id: string; sciId: string; address: string; ville: string; cp: string; type: string; surface: number; lots: number; prixAchat: number; travaux: number; fraisNotaire: number; valeurActuelle: number; loyer: number; taxeFonciere: number; assurance: number; gestionDeleguee?: boolean; honorairesGestionPct?: number; credit?: Credit }
 interface SCI { id: string; name: string; shortName: string; type: "IR" | "IS" | "RP"; creation: string; valeurEstimee: number; associes: Associe[]; color: string; gradient: string }
 interface Tenant { id: string; propertyId: string; nom: string; initiales: string; tel: string; email: string; debutBail: string; finBail: string; debutTs: number; finTs: number; loyer: number; charges: number; statut: "En cours" | "Impayé" | "Terminé" }
@@ -130,13 +148,6 @@ const ALERTS_INIT: AlertItem[] = [
   { id: "a5", type: "taxe", title: "Taxe foncière à régler", detail: "SCI TROIKA · 45 Av. de la République · Octobre 2026", severity: "medium" },
   { id: "a6", type: "assurance", title: "Assurance à renouveler", detail: "SCI BENEDUC · Immeuble Victor Hugo, Tourcoing · Déc. 2026", severity: "low" },
 ];
-const PATRIMOINE_DATA = [
-  { an: "2017", valeur: 580, dette: 415, net: 165 }, { an: "2018", valeur: 850, dette: 630, net: 220 },
-  { an: "2019", valeur: 1320, dette: 1010, net: 310 }, { an: "2020", valeur: 1870, dette: 1240, net: 630 },
-  { an: "2021", valeur: 2120, dette: 1100, net: 1020 }, { an: "2022", valeur: 2380, dette: 980, net: 1400 },
-  { an: "2023", valeur: 2510, dette: 900, net: 1610 }, { an: "2024", valeur: 2665, dette: 848, net: 1817 },
-];
-
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
@@ -144,17 +155,29 @@ const uid = () => `id_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const cashFlow = (p: Property) => cashFlowMensuel(p, false);
 const finCredit = (c: Credit) => {
   if (c.finCredit) {
-    const d = new Date(c.finCredit);
+    const d = parseLocalDate(c.finCredit);
     if (!Number.isNaN(d.getTime())) {
       return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
     }
   }
   if (!c.debut || !c.duree) return "—";
-  const summary = computeLoanSummary({ montantInitial: c.montantInitial, tauxAnnuel: c.taux, dureeMois: c.duree, dateDebut: c.debut, assuranceMensuelle: c.assuranceMensuelle });
+  const summary = computeLoanSummary({
+    montantInitial: c.montantInitial,
+    tauxAnnuel: c.taux,
+    dureeMois: c.duree,
+    dateDebut: c.debut,
+    assuranceMensuelle: c.assuranceMensuelle,
+    amortizationModel: c.amortizationModel,
+  });
   return summary.finCredit.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 };
 
-function LoanCalcSummary({ credit }: { credit: Pick<Credit, "montantInitial" | "taux" | "duree" | "debut" | "assuranceMensuelle"> }) {
+function LoanCalcSummary({
+  credit,
+}: {
+  credit: Pick<Credit, "montantInitial" | "taux" | "duree" | "debut" | "assuranceMensuelle" | "amortizationModel">;
+}) {
+  const interestOnly = isInterestOnlyModel(credit.amortizationModel);
   const summary = useMemo(() => {
     if (!credit.montantInitial || !credit.duree || !credit.debut) return null;
     return computeLoanSummary({
@@ -163,26 +186,34 @@ function LoanCalcSummary({ credit }: { credit: Pick<Credit, "montantInitial" | "
       dureeMois: credit.duree,
       dateDebut: credit.debut,
       assuranceMensuelle: credit.assuranceMensuelle,
+      amortizationModel: interestOnly ? "INTEREST_ONLY" : "RATE_BASED",
     });
-  }, [credit.montantInitial, credit.taux, credit.duree, credit.debut, credit.assuranceMensuelle]);
+  }, [credit.montantInitial, credit.taux, credit.duree, credit.debut, credit.assuranceMensuelle, interestOnly]);
 
   if (!summary) return null;
 
   return (
-    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 w-full">
-      {[
-        { l: "Mensualité crédit", v: fmt(summary.mensualite), c: "var(--v-violet-text)" },
-        { l: "Mensualité totale", v: fmt(summary.mensualiteTotale), c: "var(--v-info-text)" },
-        { l: "Capital restant", v: fmt(summary.capitalRestant), c: "var(--v-negative-text)" },
-        { l: "Intérêts totaux", v: fmt(summary.totalInterets), c: "var(--v-warning-text)" },
-        { l: "Remboursé", v: `${summary.pctRembourse} %`, c: "var(--v-positive-text)" },
-        { l: "Fin de prêt", v: summary.finCredit.toLocaleDateString("fr-FR", { month: "short", year: "numeric" }), c: "var(--v-text-muted)" },
-      ].map((m) => (
-        <div key={m.l} className="vision-surface rounded-xl p-3">
-          <MetricLabel label={m.l} />
-          <p className="text-xs font-bold font-mono" style={{ color: m.c }}>{m.v}</p>
-        </div>
-      ))}
+    <div className="mt-4 space-y-2">
+      {interestOnly && (
+        <p className="text-xs vision-text-muted">
+          Intérêts seuls — le capital reste dû jusqu’à la dernière échéance (remboursement in fine).
+        </p>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 w-full">
+        {[
+          { l: interestOnly ? "Intérêts / mois" : "Mensualité crédit", v: fmt(summary.mensualite), c: "var(--v-violet-text)" },
+          { l: "Mensualité totale", v: fmt(summary.mensualiteTotale), c: "var(--v-info-text)" },
+          { l: "Capital restant", v: fmt(summary.capitalRestant), c: "var(--v-negative-text)" },
+          { l: "Intérêts totaux", v: fmt(summary.totalInterets), c: "var(--v-warning-text)" },
+          { l: "Remboursé", v: `${summary.pctRembourse} %`, c: "var(--v-positive-text)" },
+          { l: "Fin de prêt", v: summary.finCredit.toLocaleDateString("fr-FR", { month: "short", year: "numeric" }), c: "var(--v-text-muted)" },
+        ].map((m) => (
+          <div key={m.l} className="vision-surface rounded-xl p-3">
+            <MetricLabel label={m.l} />
+            <p className="text-xs font-bold font-mono" style={{ color: m.c }}>{m.v}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -503,6 +534,16 @@ function DashboardView({
       })
     : null;
 
+  const patrimoineSeries = useMemo(() => {
+    const shareRatioFn = shareName
+      ? (sciId: string) => {
+          const sci = scopeScis.find((s) => s.id === sciId);
+          return sci ? sciShareRatio(sci, shareName) : 0;
+        }
+      : undefined;
+    return buildPatrimoineEvolution(scopeProperties, scopeScis, { shareRatioFn });
+  }, [scopeProperties, scopeScis, shareName]);
+
   const kpis = [
     { l: "Patrimoine brut", v: fmt(totalBrut), color: "#60a5fa", Icon: Building2 },
     { l: "Dette restante", v: fmt(totalDette), color: "#f87171", Icon: CreditCard },
@@ -599,9 +640,9 @@ function DashboardView({
         </motion.div>
         <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.18 }} className={`${G} p-4 sm:p-5 xl:col-span-3 w-full min-w-0`}>
           <p className={`${lbl} mb-0.5`}>Évolution du patrimoine</p>
-          <p className="text-xs vision-text-muted mb-4">2017–2024 · milliers d&apos;euros</p>
+          <p className="text-xs vision-text-muted mb-4">{patrimoineRangeLabel(patrimoineSeries.fromYear, patrimoineSeries.toYear)}</p>
           <ResponsiveContainer width="100%" height={188}>
-            <AreaChart data={PATRIMOINE_DATA} margin={{ top: 5, right: 5, left: -22, bottom: 0 }}>
+            <AreaChart data={patrimoineSeries.data} margin={{ top: 5, right: 5, left: -22, bottom: 0 }}>
               <defs>
                 <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={0.22} /><stop offset="100%" stopColor="#60a5fa" stopOpacity={0} /></linearGradient>
                 <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={0.22} /><stop offset="100%" stopColor="#34d399" stopOpacity={0} /></linearGradient>
@@ -650,7 +691,18 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
   const isEdit = !!property;
   const [f, setF] = useState<Property>(property ?? { id: uid(), sciId: scis[0]?.id ?? "", address: "", ville: "", cp: "", type: "T2", surface: 0, lots: 1, prixAchat: 0, travaux: 0, fraisNotaire: 0, valeurActuelle: 0, loyer: 0, taxeFonciere: 0, assurance: 0, gestionDeleguee: false, honorairesGestionPct: 0 });
   const [hasCredit, setHasCredit] = useState(!!property?.credit);
-  const [cred, setCred] = useState<Credit>(property?.credit ?? { banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
+  const [cred, setCred] = useState<Credit>(property?.credit ?? {
+    banque: "",
+    montantInitial: 0,
+    taux: 0,
+    duree: 0,
+    mensualite: 0,
+    debut: "",
+    capitalRestant: 0,
+    assuranceMensuelle: 0,
+    finCredit: "",
+    amortizationModel: "RATE_BASED",
+  });
   const upd = (k: keyof Property, v: string | number | boolean) => setF((p) => ({ ...p, [k]: v }));
   const updC = (k: keyof Credit, v: string | number) => setCred((c) => patchCreditField(c, k, v));
   const applyTamImport = (r: TamImportResult) => {
@@ -667,6 +719,7 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
       assuranceMensuelle: r.assuranceMensuelle,
       mensualite: r.mensualite,
       capitalRestant: r.capitalRestant,
+      amortizationModel: "RATE_BASED",
     }));
   };
   const enrichedCred = useMemo(() => enrichCredit(cred), [cred]);
@@ -774,7 +827,33 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2, ease }}
             >
-              <p className="text-xs vision-text-muted mb-3">Montant, taux, date de début et date de fin — la durée et les mensualités se calculent automatiquement.</p>
+              <p className="text-xs vision-text-muted mb-3">
+                {isInterestOnlyModel(cred.amortizationModel)
+                  ? "Intérêts seuls chaque mois — capital remboursé en une fois à la fin."
+                  : "Montant, taux, date de début et date de fin — la durée et les mensualités se calculent automatiquement."}
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {([
+                  { id: "RATE_BASED", label: "Amortissement classique" },
+                  { id: "INTEREST_ONLY", label: "Intérêts seuls (in fine)" },
+                ] as const).map((opt) => {
+                  const active = (cred.amortizationModel ?? "RATE_BASED") === opt.id
+                    || (!cred.amortizationModel && opt.id === "RATE_BASED");
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => updC("amortizationModel", opt.id)}
+                      className="px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all"
+                      style={active
+                        ? { borderColor: "#60a5fa", backgroundColor: "rgba(96,165,250,0.18)", color: "#60a5fa" }
+                        : { borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.38)" }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <BanqueField value={cred.banque} onChange={(b) => updC("banque", b)} existingBanks={existingBanks} className="sm:col-span-2" />
                 <GI label="Montant emprunté (€)" type="number" value={cred.montantInitial || ""} onChange={(e) => updC("montantInitial", +e.target.value)} />
@@ -1220,7 +1299,20 @@ type CreditEntry = Credit & { id: string; propertyId: string };
 
 function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { credit: CreditEntry | null; properties: Property[]; onSave: (c: CreditEntry) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
   const isEdit = !!credit;
-  const [f, setF] = useState<CreditEntry>(credit ?? { id: uid(), propertyId: properties[0]?.id ?? "", banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
+  const [f, setF] = useState<CreditEntry>(credit ?? {
+    id: uid(),
+    propertyId: properties[0]?.id ?? "",
+    banque: "",
+    montantInitial: 0,
+    taux: 0,
+    duree: 0,
+    mensualite: 0,
+    debut: "",
+    capitalRestant: 0,
+    assuranceMensuelle: 0,
+    finCredit: "",
+    amortizationModel: "RATE_BASED",
+  });
   const existingBanks = useMemo(
     () => properties.map((p) => p.credit?.banque).filter((b): b is string => Boolean(b)),
     [properties],
@@ -1238,6 +1330,7 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
       assuranceMensuelle: r.assuranceMensuelle,
       mensualite: r.mensualite,
       capitalRestant: r.capitalRestant,
+      amortizationModel: "RATE_BASED",
     }) as CreditEntry);
   };
   const enriched = useMemo(() => enrichCredit(f) as CreditEntry, [f]);
@@ -1257,9 +1350,35 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
       />
       <GSec title="Bien associé"><GS label="Bien" value={f.propertyId} onChange={(e) => upd("propertyId", e.target.value)} options={properties.map((p) => ({ value: p.id, label: `${p.address}, ${p.ville}` }))} /></GSec>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5 w-full">
-      <GSec title="Prêt bancaire — saisie minimale">
+      <GSec title="Prêt — saisie minimale">
         <TamPdfImportButton existingBanks={existingBanks} onImported={applyTamImport} className="mb-4" />
-        <p className="text-xs vision-text-muted mb-4">Renseignez montant, taux, date de début et date de fin. La durée et les mensualités se calculent automatiquement.</p>
+        <p className="text-xs vision-text-muted mb-3">
+          {isInterestOnlyModel(f.amortizationModel)
+            ? "Intérêts seuls chaque mois — capital remboursé en une fois à la fin."
+            : "Renseignez montant, taux, date de début et date de fin. La durée et les mensualités se calculent automatiquement."}
+        </p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {([
+            { id: "RATE_BASED", label: "Amortissement classique" },
+            { id: "INTEREST_ONLY", label: "Intérêts seuls (in fine)" },
+          ] as const).map((opt) => {
+            const active = (f.amortizationModel ?? "RATE_BASED") === opt.id
+              || (!f.amortizationModel && opt.id === "RATE_BASED");
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => upd("amortizationModel", opt.id)}
+                className="px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all"
+                style={active
+                  ? { borderColor: "#60a5fa", backgroundColor: "rgba(96,165,250,0.18)", color: "#60a5fa" }
+                  : { borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.38)" }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
           <BanqueField value={f.banque} onChange={(b) => upd("banque", b)} existingBanks={existingBanks} className="sm:col-span-2 xl:col-span-3" />
           <GI label="Montant emprunté (€)" type="number" value={f.montantInitial || ""} onChange={(e) => upd("montantInitial", +e.target.value)} />
@@ -1308,6 +1427,7 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
         mensualite: computed.mensualite,
         capitalRestant: computed.capitalRestant,
         finCredit: computed.finCredit ?? null,
+        amortizationModel: computed.amortizationModel ?? null,
       },
     });
     setMode("list");
@@ -1359,11 +1479,11 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
               ]}
             />
             <FilterSelect
-              label="Banque"
+              label="Prêteur"
               value={filterBanque}
               onChange={setFilterBanque}
               options={[
-                { value: "all", label: "Toutes banques" },
+                { value: "all", label: "Tous les prêteurs" },
                 ...banques.map((b) => ({
                   value: b,
                   label: `${b} (${allCredits.filter((c) => c.banque === b).length})`,
@@ -1563,15 +1683,44 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
 function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { properties: Property[]; scis: SCI[]; onSelectSci: (id: string) => void; onOpenFullPage: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [filterResult, setFilterResult] = useState<"all" | "pos" | "neg">("all");
+  const sciTotals = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof comptaMensuel> & { fill: string; name: string }>();
+    for (const sci of scis) {
+      const props = properties.filter((p) => p.sciId === sci.id);
+      const agg = props.reduce(
+        (acc, p) => {
+          const m = comptaMensuel(p);
+          acc.loyers += m.loyers;
+          acc.credits += m.credits;
+          acc.taxes += m.taxes;
+          acc.assurances += m.assurances;
+          acc.honoraires += m.honoraires;
+          acc.charges += m.charges;
+          acc.result += m.result;
+          return acc;
+        },
+        { loyers: 0, credits: 0, taxes: 0, assurances: 0, honoraires: 0, charges: 0, result: 0 },
+      );
+      map.set(sci.id, { ...agg, fill: sci.color, name: sci.shortName });
+    }
+    return map;
+  }, [scis, properties]);
+
   const filteredScis = useMemo(() => scis.filter((sci) => {
-    const props = properties.filter((p) => p.sciId === sci.id);
-    const res = props.reduce((s, p) => s + cashFlow(p), 0);
+    const res = sciTotals.get(sci.id)?.result ?? 0;
     if (filterResult === "pos" && res < 0) return false;
     if (filterResult === "neg" && res >= 0) return false;
     return matchesSearch(query, sci.name, sci.shortName, sci.type);
-  }), [scis, properties, query, filterResult]);
-  const grandCF = properties.reduce((s, p) => s + cashFlow(p), 0);
-  const barData = filteredScis.map((sci) => { const props = properties.filter((p) => p.sciId === sci.id); return { name: sci.shortName, revenus: props.reduce((s, p) => s + p.loyer, 0), charges: props.reduce((s, p) => s + (p.credit?.mensualite ?? 0) + p.taxeFonciere / 12 + p.assurance / 12, 0), fill: sci.color }; });
+  }), [scis, sciTotals, query, filterResult]);
+
+  const grandCF = useMemo(
+    () => properties.reduce((s, p) => s + comptaMensuel(p).result, 0),
+    [properties],
+  );
+  const barData = filteredScis.map((sci) => {
+    const t = sciTotals.get(sci.id)!;
+    return { name: t.name, revenus: t.loyers, charges: t.charges, fill: t.fill };
+  });
   const pageSize = useDuoGridPageSize();
   const paging = usePagination(filteredScis, `${query}-${filterResult}-${filteredScis.length}`, pageSize);
   const filtersActive = query !== "" || filterResult !== "all";
@@ -1611,13 +1760,16 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
       {filteredScis.length === 0 ? <FilterEmpty /> : null}
       <motion.div variants={gridV} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2 gap-4 md:gap-5 w-full">
         {paging.pageItems.map((sci) => {
-          const props = properties.filter((p) => p.sciId === sci.id);
-          const loyers = props.reduce((s, p) => s + p.loyer, 0);
-          const credits = props.reduce((s, p) => s + (p.credit?.mensualite ?? 0), 0);
-          const taxes = props.reduce((s, p) => s + p.taxeFonciere / 12, 0);
-          const assurances = props.reduce((s, p) => s + p.assurance / 12, 0);
-          const res = loyers - credits - taxes - assurances;
-          const maxV = Math.max(loyers, credits + taxes + assurances, 1);
+          const t = sciTotals.get(sci.id)!;
+          const { loyers, credits, taxes, assurances, honoraires, result: res } = t;
+          const chargeRows = [
+            { label: "Loyers", value: loyers, color: "#34d399", dir: "▲" as const },
+            { label: "Crédits", value: credits, color: "#f87171", dir: "▼" as const },
+            { label: "Taxe foncière", value: taxes, color: "#fbbf24", dir: "▼" as const },
+            { label: "Assurances", value: assurances, color: "#94a3b8", dir: "▼" as const },
+            ...(honoraires > 0 ? [{ label: "Honoraires gestion", value: honoraires, color: "#a78bfa", dir: "▼" as const }] : []),
+          ];
+          const maxV = Math.max(loyers, credits + taxes + assurances + honoraires, 1);
           return (
             <motion.div key={sci.id} variants={itemV} whileHover={{ y: -2 }} onClick={() => onSelectSci(sci.id)} className={`${G} overflow-hidden cursor-pointer`}>
               <div className={`px-5 py-4 bg-gradient-to-r ${sci.gradient} flex items-center justify-between gap-3`}>
@@ -1628,7 +1780,7 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
                 </div>
               </div>
               <div className="p-5 space-y-4">
-                {[{ label: "Loyers", value: loyers, color: "#34d399", dir: "▲" }, { label: "Crédits", value: credits, color: "#f87171", dir: "▼" }, { label: "Taxe foncière", value: taxes, color: "#fbbf24", dir: "▼" }, { label: "Assurances", value: assurances, color: "#94a3b8", dir: "▼" }].map((row) => (
+                {chargeRows.map((row) => (
                   <div key={row.label}><div className="flex justify-between items-center mb-1.5"><p className="text-xs vision-text-muted">{row.label}</p><p className="text-xs font-bold font-mono" style={{ color: row.color }}>{row.dir} {fmt(row.value)}</p></div><GBar pct={(row.value / maxV) * 100} color={row.color} /></div>
                 ))}
                 <div className="pt-3 border-t border-[var(--v-border-subtle)] flex justify-between items-center"><span className="text-xs vision-text-muted">Résultat mensuel</span><span className="text-base font-bold font-mono" style={{ color: res >= 0 ? "#34d399" : "#f87171" }}>{res >= 0 ? "+" : ""}{fmt(res)}</span></div>
@@ -1665,10 +1817,25 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
   const totalPV = items.reduce((s, x) => s + x.pv, 0);
   const filtersActive = query !== "" || filterSci !== "all" || filterPv !== "all";
   const resetFilters = () => { setQuery(""); setFilterSci("all"); setFilterPv("all"); };
+  const chartProperties = useMemo(
+    () => (filterSci === "all" ? properties : properties.filter((p) => p.sciId === filterSci)),
+    [properties, filterSci],
+  );
+  const chartScis = useMemo(
+    () => (filterSci === "all" ? scis : scis.filter((s) => s.id === filterSci)),
+    [scis, filterSci],
+  );
+  const patrimoineSeries = useMemo(
+    () => buildPatrimoineEvolution(chartProperties, chartScis),
+    [chartProperties, chartScis],
+  );
+  const coutRevientTotal = items.reduce((s, x) => s + x.cr, 0);
+  // Aligné sur le tableau filtré (valeur des biens), pas la valeur SCI globale non filtrée
+  const valeurMarcheFiltree = items.reduce((s, x) => s + x.p.valeurActuelle, 0);
   return (
     <div className={`${pageWrap} space-y-4 md:space-y-5`}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[{ l: "Coût de revient total", v: fmt(items.reduce((s, x) => s + x.cr, 0)), c: "rgba(255,255,255,0.65)" }, { l: "Valeur de marché", v: fmt(scis.reduce((s, x) => s + x.valeurEstimee, 0)), c: "#60a5fa" }, { l: "Plus-value latente", v: `${totalPV >= 0 ? "+" : ""}${fmt(totalPV)}`, c: totalPV >= 0 ? "#34d399" : "#f87171" }].map((k, i) => (
+        {[{ l: "Coût de revient total", v: fmt(coutRevientTotal), c: "rgba(255,255,255,0.65)" }, { l: "Valeur de marché", v: fmt(valeurMarcheFiltree), c: "#60a5fa" }, { l: "Plus-value latente", v: `${totalPV >= 0 ? "+" : ""}${fmt(totalPV)}`, c: totalPV >= 0 ? "#34d399" : "#f87171" }].map((k, i) => (
           <motion.div key={k.l} variants={itemV} initial="hidden" animate="show" transition={{ delay: i * 0.07 }} className={`${G} p-4`}><p className={lbl}>{k.l}</p><p className="text-xl font-bold font-mono" style={{ color: k.c }}>{k.v}</p></motion.div>
         ))}
       </div>
@@ -1695,9 +1862,9 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
             />
       </FiltersPanel>
       <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.15 }} className={`${G} p-5`}>
-        <p className={`${lbl} mb-4`}>Évolution 2017 – 2024 · k€</p>
+        <p className={`${lbl} mb-4`}>Évolution du patrimoine · {patrimoineRangeLabel(patrimoineSeries.fromYear, patrimoineSeries.toYear)}</p>
         <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={PATRIMOINE_DATA} margin={{ top: 5, right: 5, left: -18, bottom: 0 }}>
+          <AreaChart data={patrimoineSeries.data} margin={{ top: 5, right: 5, left: -18, bottom: 0 }}>
             <defs>
               <linearGradient id="pv2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={0.26} /><stop offset="100%" stopColor="#60a5fa" stopOpacity={0} /></linearGradient>
               <linearGradient id="pn2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={0.26} /><stop offset="100%" stopColor="#34d399" stopOpacity={0} /></linearGradient>

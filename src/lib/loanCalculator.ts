@@ -1,13 +1,24 @@
+/** Modèle d’amortissement persisté / calculé. */
+export type AmortizationModel = "RATE_BASED" | "INTEREST_ONLY" | "EXCEL_FLAT";
+
 export interface LoanInput {
   montantInitial: number;
   tauxAnnuel: number;
   dureeMois: number;
   dateDebut: string;
   assuranceMensuelle?: number;
+  /** INTEREST_ONLY = intérêts seuls, capital remboursé en fin (in fine). */
+  amortizationModel?: AmortizationModel | string | null;
 }
 
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Mensualité d’intérêts seuls (hors assurance). */
+export function computeInterestOnlyPayment(capital: number, tauxAnnuel: number): number {
+  if (capital <= 0 || tauxAnnuel <= 0) return 0;
+  return round2((capital * (tauxAnnuel / 100)) / 12);
 }
 
 /**
@@ -52,11 +63,8 @@ export function computeMonthlyPayment(capital: number, tauxAnnuel: number, duree
 
 function buildScheduleCore(input: LoanInput) {
   const assurance = input.assuranceMensuelle ?? 0;
-  const mensualiteExact = computeMonthlyPaymentExact(input.montantInitial, input.tauxAnnuel, input.dureeMois);
-  const mensualiteAffichee = round2(mensualiteExact);
-  const tauxMensuel = input.tauxAnnuel / 100 / 12;
   const debut = parseLocalDate(input.dateDebut);
-  let crd = input.montantInitial;
+  const interestOnly = input.amortizationModel === "INTEREST_ONLY";
 
   const rows: Array<{
     moisIndex: number;
@@ -67,6 +75,37 @@ function buildScheduleCore(input: LoanInput) {
     assurance: number;
     mensualite: number;
   }> = [];
+
+  if (interestOnly) {
+    const capital = input.montantInitial;
+    const interetsMens = computeInterestOnlyPayment(capital, input.tauxAnnuel);
+    for (let i = 0; i < input.dureeMois; i++) {
+      const periode = addMonths(debut, i);
+      const last = i === input.dureeMois - 1;
+      const capitalAmorti = last ? round2(capital) : 0;
+      const mensualite = last ? round2(interetsMens + capital) : interetsMens;
+      rows.push({
+        moisIndex: i + 1,
+        periode,
+        crd: last ? 0 : capital,
+        capitalAmorti,
+        interets: interetsMens,
+        assurance,
+        mensualite,
+      });
+    }
+    return {
+      rows,
+      mensualiteAffichee: interetsMens,
+      assurance,
+      totalInterets: round2(rows.reduce((s, r) => s + r.interets, 0)),
+    };
+  }
+
+  const mensualiteExact = computeMonthlyPaymentExact(input.montantInitial, input.tauxAnnuel, input.dureeMois);
+  const mensualiteAffichee = round2(mensualiteExact);
+  const tauxMensuel = input.tauxAnnuel / 100 / 12;
+  let crd = input.montantInitial;
 
   for (let i = 0; i < input.dureeMois; i++) {
     const periode = addMonths(debut, i);
@@ -235,13 +274,37 @@ export function projectImportedCrd(opts: {
   return round2(Math.max(0, capitalAtRef * (leftAtProj / leftAtRef)));
 }
 
-/** Tableau d’amortissement bancaire classique (intérêts) si taux + durée + début. */
+export function isInterestOnlyModel(model?: string | null): boolean {
+  return model === "INTEREST_ONLY";
+}
+
+/** Crédit in fine / intérêts seuls. */
+export function hasInterestOnlyAmortization(credit: {
+  montantInitial?: number;
+  taux?: number;
+  duree?: number;
+  debut?: string | null;
+  amortizationModel?: string | null;
+}): boolean {
+  return Boolean(
+    isInterestOnlyModel(credit.amortizationModel) &&
+      credit.montantInitial &&
+      (credit.taux ?? 0) > 0 &&
+      credit.duree &&
+      credit.debut &&
+      String(credit.debut).trim() !== "",
+  );
+}
+
+/** Tableau d’amortissement bancaire classique si taux + durée + début (hors in fine). */
 export function hasRateBasedAmortization(credit: {
   montantInitial?: number;
   taux?: number;
   duree?: number;
   debut?: string | null;
+  amortizationModel?: string | null;
 }): boolean {
+  if (isInterestOnlyModel(credit.amortizationModel)) return false;
   return Boolean(
     credit.montantInitial &&
       (credit.taux ?? 0) > 0 &&
@@ -273,6 +336,7 @@ export function enrichCredit(credit: {
   mensualite?: number;
   capitalRestant?: number;
   finCredit?: string | null;
+  amortizationModel?: string | null;
 }) {
   // Synchroniser début / fin / durée avant calculs
   let duree = credit.duree;
@@ -285,6 +349,24 @@ export function enrichCredit(credit: {
 
   const synced = { ...credit, duree, finCredit };
 
+  if (hasInterestOnlyAmortization(synced)) {
+    const summary = computeLoanSummary({
+      montantInitial: synced.montantInitial,
+      tauxAnnuel: synced.taux,
+      dureeMois: synced.duree,
+      dateDebut: synced.debut,
+      assuranceMensuelle: synced.assuranceMensuelle,
+      amortizationModel: "INTEREST_ONLY",
+    });
+    return {
+      ...synced,
+      amortizationModel: "INTEREST_ONLY" as const,
+      mensualite: summary.mensualite,
+      capitalRestant: summary.capitalRestant,
+      finCredit: synced.finCredit ?? finFromDebutDuree(synced.debut, synced.duree),
+    };
+  }
+
   // Nouveau prêt / prêt à taux : générer mensualité + CRD depuis les paramètres
   if (hasRateBasedAmortization(synced)) {
     const summary = computeLoanSummary({
@@ -293,9 +375,11 @@ export function enrichCredit(credit: {
       dureeMois: synced.duree,
       dateDebut: synced.debut,
       assuranceMensuelle: synced.assuranceMensuelle,
+      amortizationModel: "RATE_BASED",
     });
     return {
       ...synced,
+      amortizationModel: synced.amortizationModel === "EXCEL_FLAT" ? "EXCEL_FLAT" : "RATE_BASED",
       mensualite: summary.mensualite,
       capitalRestant: summary.capitalRestant,
       finCredit: synced.finCredit ?? finFromDebutDuree(synced.debut, synced.duree),
@@ -312,6 +396,7 @@ export function enrichCredit(credit: {
     });
     return {
       ...synced,
+      amortizationModel: synced.amortizationModel ?? "EXCEL_FLAT",
       mensualite: synced.mensualite,
       capitalRestant,
       finCredit: synced.finCredit ?? null,
@@ -320,6 +405,7 @@ export function enrichCredit(credit: {
 
   return {
     ...synced,
+    amortizationModel: synced.amortizationModel ?? null,
     mensualite: synced.mensualite ?? 0,
     capitalRestant: synced.capitalRestant ?? 0,
     finCredit: synced.finCredit ?? null,
@@ -341,6 +427,7 @@ export function patchCreditField<T extends {
   mensualite?: number;
   capitalRestant?: number;
   finCredit?: string | null;
+  amortizationModel?: string | null;
 }>(credit: T, key: keyof T | string, value: string | number): T {
   const next = { ...credit, [key]: value } as T;
 
@@ -361,4 +448,15 @@ export function patchCreditField<T extends {
   }
 
   return enrichCredit(next as typeof credit) as T;
+}
+
+/** Déduit le modèle à persister. */
+export function resolveAmortizationModel(credit: {
+  taux?: number;
+  amortizationModel?: string | null;
+}): AmortizationModel {
+  if (credit.amortizationModel === "INTEREST_ONLY") return "INTEREST_ONLY";
+  if (credit.amortizationModel === "EXCEL_FLAT") return "EXCEL_FLAT";
+  if ((credit.taux ?? 0) > 0) return "RATE_BASED";
+  return "EXCEL_FLAT";
 }

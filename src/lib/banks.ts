@@ -15,6 +15,8 @@ export const KNOWN_BANKS = [
 ] as const;
 
 export const BANK_OTHER_VALUE = "__autre__";
+/** Option liste : prêteur personne physique (saisie libre). */
+export const BANK_PRIVATE_VALUE = "__particulier__";
 
 function normalizeBankKey(name: string): string {
   return name

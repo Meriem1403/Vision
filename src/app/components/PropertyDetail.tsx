@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { buildAmortizationSchedule, computeLoanSummary, type LoanInput } from "@/lib/loanCalculator";
+import {
+  buildAmortizationSchedule,
+  computeLoanSummary,
+  isInterestOnlyModel,
+  type LoanInput,
+} from "@/lib/loanCalculator";
 import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
 import { MetricCard } from "./MetricWithFormula";
@@ -17,6 +22,7 @@ export interface CreditShape {
   assuranceMensuelle?: number;
   mensualite: number;
   capitalRestant: number;
+  amortizationModel?: string | null;
 }
 
 export interface PropertyShape {
@@ -62,6 +68,7 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
     dureeMois: property.credit.duree,
     dateDebut: property.credit.debut,
     assuranceMensuelle: property.credit.assuranceMensuelle,
+    amortizationModel: property.credit.amortizationModel,
   } : null;
   const summary = loanInput ? computeLoanSummary(loanInput) : null;
 
@@ -106,11 +113,19 @@ export function PropertyDetailContent({ property, sciName, sciColor, onViewCredi
       {property.credit && summary && loanInput && variant !== "page" && (
         <Section title="Crédit immobilier">
           <div className="grid grid-cols-2 gap-2 mb-3">
-            <MetricCard label="Banque" value={property.credit.banque} />
+            <MetricCard label="Prêteur" value={property.credit.banque} />
+            <MetricCard
+              label="Type"
+              value={isInterestOnlyModel(property.credit.amortizationModel) ? "Intérêts seuls (in fine)" : "Amortissement"}
+            />
             <MetricCard label="Taux" value={`${property.credit.taux} %`} />
             <MetricCard label="Montant emprunté" value={fmt(property.credit.montantInitial)} />
             <MetricCard label="Capital restant" value={fmt(summary.capitalRestant)} color="#f87171" />
-            <MetricCard label="Mensualité crédit" value={fmtD(summary.mensualite)} color="#a78bfa" />
+            <MetricCard
+              label={isInterestOnlyModel(property.credit.amortizationModel) ? "Intérêts / mois" : "Mensualité crédit"}
+              value={fmtD(summary.mensualite)}
+              color="#a78bfa"
+            />
             <MetricCard label="Mensualité totale" value={fmtD(summary.mensualiteTotale)} />
             <MetricCard label="Remboursé" value={`${summary.pctRembourse} %`} color="#34d399" />
             <MetricCard label="Fin de prêt" value={summary.finCredit.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })} />
@@ -140,6 +155,7 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
     dureeMois: credit.duree,
     dateDebut: credit.debut,
     assuranceMensuelle: credit.assuranceMensuelle,
+    amortizationModel: credit.amortizationModel,
   };
   const summary = computeLoanSummary(loanInput);
   const schedule = buildAmortizationSchedule(loanInput);
@@ -191,7 +207,11 @@ export function CreditDetailContent({ credit, property, sciName, sciColor, fullS
 
       {!previewSchedule && (
       <div className={`grid grid-cols-2 sm:grid-cols-3 ${fullSchedule ? "xl:grid-cols-4" : "lg:grid-cols-4"} gap-2 sm:gap-3 w-full min-w-0`}>
-        <MetricCard label="Banque" value={credit.banque} />
+        <MetricCard label="Prêteur" value={credit.banque} />
+        <MetricCard
+          label="Type"
+          value={isInterestOnlyModel(credit.amortizationModel) ? "Intérêts seuls (in fine)" : "Amortissement"}
+        />
         <MetricCard label="Taux annuel" value={`${credit.taux} %`} />
         <MetricCard label="Montant emprunté" value={fmt(credit.montantInitial)} />
         <MetricCard label="Date de début" value={debutLabel} />
