@@ -13,7 +13,9 @@ import {
   type PortfolioSegment,
 } from "@/lib/routes";
 import { AddressAutocomplete } from "@/app/components/AddressAutocomplete";
+import { AssocieField } from "@/app/components/AssocieField";
 import { BanqueField } from "@/app/components/BanqueField";
+import { resolveAssocieName, sameAssocieName } from "@/lib/associates";
 import { FilterEmpty, FilterSelect, FiltersPanel, SearchBar, matchesSearch } from "@/app/components/ListFilters";
 import { PaginationBar, useCardsGridPageSize, useDuoGridPageSize, usePagination } from "@/app/components/Pagination";
 import { TamPdfImportButton } from "@/app/components/TamPdfImport";
@@ -977,20 +979,46 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
 
 // ─── SCI FORM & VIEW ─────────────────────────────────────────────────────────
 
-function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (s: SCI) => void | Promise<void>; onBack: () => void; onDelete?: () => void | Promise<void> }) {
+function SCIForm({
+  sci,
+  existingAssociates = [],
+  onSave,
+  onBack,
+  onDelete,
+}: {
+  sci: SCI | null;
+  /** Associés déjà présents sur le patrimoine (autres SCI) */
+  existingAssociates?: string[];
+  onSave: (s: SCI) => void | Promise<void>;
+  onBack: () => void;
+  onDelete?: () => void | Promise<void>;
+}) {
   const isEdit = !!sci;
   const [f, setF] = useState<SCI>(sci ?? { id: uid(), name: "", shortName: "", type: "IR", creation: "", valeurEstimee: 0, associes: [{ name: "", parts: 50 }, { name: "", parts: 50 }], color: "#60a5fa", gradient: "from-blue-500/20 to-transparent" });
   const updF = (k: keyof SCI, v: string | number) => setF((s) => ({ ...s, [k]: v }));
+  const knownNames = useMemo(
+    () => [...existingAssociates, ...f.associes.map((a) => a.name)],
+    [existingAssociates, f.associes],
+  );
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
       <FormHdr
         title={isEdit ? `Modifier · ${f.name}` : "Nouvelle SCI"}
         onBack={onBack}
         onDelete={onDelete}
-        onSave={() => onSave({
-          ...f,
-          associes: f.associes.filter((a) => a.name.trim().length > 0),
-        })}
+        onSave={() => {
+          const cleaned = f.associes
+            .map((a) => ({ ...a, name: resolveAssocieName(a.name, knownNames) }))
+            .filter((a) => a.name.trim().length > 0);
+          // Fusionne les doublons éventuels (même nom) en additionnant les parts
+          const merged: Associe[] = [];
+          for (const a of cleaned) {
+            const hit = merged.find((m) => sameAssocieName(m.name, a.name));
+            if (hit) hit.parts += a.parts;
+            else merged.push({ ...a });
+          }
+          onSave({ ...f, associes: merged });
+        }}
         isEdit={isEdit}
       />
       <GSec title="Identité">
@@ -1008,7 +1036,16 @@ function SCIForm({ sci, onSave, onBack, onDelete }: { sci: SCI | null; onSave: (
         <div className="space-y-3">
           {f.associes.map((a, i) => (
             <div key={i} className="flex gap-2 sm:gap-3 items-end">
-              <GI placeholder={`Associé ${i + 1}`} value={a.name} onChange={(e) => setF((s) => ({ ...s, associes: s.associes.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} className="flex-1 min-w-0" />
+              <AssocieField
+                className="flex-1 min-w-0"
+                value={a.name}
+                existingNames={knownNames}
+                excludeNames={f.associes.map((x, j) => (j === i ? "" : x.name))}
+                onChange={(name) => setF((s) => ({
+                  ...s,
+                  associes: s.associes.map((x, j) => (j === i ? { ...x, name } : x)),
+                }))}
+              />
               <div className="flex items-end gap-2 shrink-0">
                 <GI type="number" placeholder="50" value={a.parts || ""} onChange={(e) => setF((s) => ({ ...s, associes: s.associes.map((x, j) => j === i ? { ...x, parts: +e.target.value } : x) }))} className="w-20" />
                 <span className="vision-text-muted text-sm pb-3">%</span>
@@ -1050,6 +1087,7 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
     return (
       <SCIForm
         sci={editing}
+        existingAssociates={scis.flatMap((s) => s.associes.map((a) => a.name))}
         onBack={() => { setMode("list"); setEditing(null); }}
         onSave={async (s) => {
           if (mode === "create") await onAdd(s);
@@ -2511,6 +2549,7 @@ function VisionShell() {
                     return (
                       <SCIForm
                         sci={s}
+                        existingAssociates={visibleScis.flatMap((x) => x.associes.map((a) => a.name))}
                         onBack={exitEdit}
                         onSave={async (next) => { await updSCI(next); exitEdit(); }}
                         onDelete={async () => { await delSCI(s.id); afterDelete(); }}
