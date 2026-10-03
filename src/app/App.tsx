@@ -13,7 +13,7 @@ import {
 } from "@/lib/loanCalculator";
 import { buildPatrimoineEvolution } from "@/lib/patrimoineEvolution";
 import { PatrimoineEvolutionChart } from "@/app/components/PatrimoineEvolutionChart";
-import { cashFlowMensuel, comptaMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
+import { cashFlowMensuel, comptaMensuel, honorairesGestionMensuel, plusValueLatente } from "@/lib/propertyFinance";
 import { computePortfolioYield, formatYieldPct } from "@/lib/propertyYield";
 import { api, isApiAvailable } from "@/lib/api";
 import {
@@ -1739,7 +1739,8 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
             />
       </FiltersPanel>
       <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.1 }} className={`${G} p-5`}>
-        <p className={`${lbl} mb-4`}>Revenus vs Charges par entité</p>
+        <p className={`${lbl} mb-1`}>Revenus vs Charges par entité</p>
+        <p className="text-xs vision-text-muted mb-4">Mensuel · charges = crédit + ass. emprunteur + taxe + PNO + honoraires</p>
         <ResponsiveContainer width="100%" height={210}>
           <BarChart data={barData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
@@ -1758,9 +1759,9 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
           const { loyers, credits, taxes, assurances, honoraires, result: res } = t;
           const chargeRows = [
             { label: "Loyers", value: loyers, color: "#34d399", dir: "▲" as const },
-            { label: "Crédits", value: credits, color: "#f87171", dir: "▼" as const },
+            { label: "Crédits (+ ass. empr.)", value: credits, color: "#f87171", dir: "▼" as const },
             { label: "Taxe foncière", value: taxes, color: "#fbbf24", dir: "▼" as const },
-            { label: "Assurances", value: assurances, color: "#94a3b8", dir: "▼" as const },
+            { label: "Assurance PNO", value: assurances, color: "#94a3b8", dir: "▼" as const },
             ...(honoraires > 0 ? [{ label: "Honoraires gestion", value: honoraires, color: "#a78bfa", dir: "▼" as const }] : []),
           ];
           const maxV = Math.max(loyers, credits + taxes + assurances + honoraires, 1);
@@ -1796,19 +1797,20 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
   const [filterPv, setFilterPv] = useState<"all" | "pos" | "neg">("all");
   const items = useMemo(() => properties
     .map((p) => {
-      const cr = p.prixAchat + p.travaux + p.fraisNotaire;
-      const pv = p.valeurActuelle - cr;
-      return { p, cr, pv, pct: cr > 0 ? (pv / cr) * 100 : 0, sci: sciOf(p, scis) };
+      const { coutRevient: cr, plusValue: pv, gainPct: pct } = plusValueLatente(p);
+      return { p, cr, pv, pct, sci: sciOf(p, scis) };
     })
     .filter((x) => {
       if (filterSci !== "all" && x.p.sciId !== filterSci) return false;
-      if (filterPv === "pos" && x.pv < 0) return false;
-      if (filterPv === "neg" && x.pv >= 0) return false;
+      if (filterPv === "pos" && (x.cr <= 0 || x.pv < 0)) return false;
+      if (filterPv === "neg" && (x.cr <= 0 || x.pv >= 0)) return false;
       return matchesSearch(query, x.p.address, x.p.ville, x.p.type, x.sci.shortName, x.sci.name);
     })
     .sort((a, b) => b.pv - a.pv), [properties, scis, query, filterSci, filterPv]);
   const paging = usePagination(items, `${filterSci}-${filterPv}-${query}-${items.length}`);
-  const totalPV = items.reduce((s, x) => s + x.pv, 0);
+  // Uniquement les biens avec coût de revient saisi (sinon PV = valeur brute, trompeur)
+  const itemsWithCost = items.filter((x) => x.cr > 0);
+  const totalPV = itemsWithCost.reduce((s, x) => s + x.pv, 0);
   const filtersActive = query !== "" || filterSci !== "all" || filterPv !== "all";
   const resetFilters = () => { setQuery(""); setFilterSci("all"); setFilterPv("all"); };
   const chartProperties = useMemo(
@@ -1823,7 +1825,7 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
     () => buildPatrimoineEvolution(chartProperties, chartScis),
     [chartProperties, chartScis],
   );
-  const coutRevientTotal = items.reduce((s, x) => s + x.cr, 0);
+  const coutRevientTotal = itemsWithCost.reduce((s, x) => s + x.cr, 0);
   // Aligné sur le tableau filtré (valeur des biens), pas la valeur SCI globale non filtrée
   const valeurMarcheFiltree = items.reduce((s, x) => s + x.p.valeurActuelle, 0);
   return (
@@ -1876,12 +1878,12 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
                 <motion.tr key={p.id} variants={rowV} initial="hidden" animate="show" transition={{ delay: i * 0.04 }} onClick={() => onSelectProperty(p.id)} className="border-b border-[var(--v-border-subtle)] hover:vision-surface transition-colors cursor-pointer group">
                   <td className="px-5 py-3.5"><p className="text-sm vision-text font-medium">{p.address}</p><p className="text-xs vision-text-muted">{p.ville} · {p.type}</p></td>
                   <td className="px-5 py-3.5"><SCIChip sci={sci} /></td>
-                  <td className="px-5 py-3.5 font-mono text-xs vision-text-muted">{fmt(cr)}</td>
+                  <td className="px-5 py-3.5 font-mono text-xs vision-text-muted">{cr > 0 ? fmt(cr) : "—"}</td>
                   <td className="px-5 py-3.5 font-mono text-xs font-semibold vision-text/82">{fmt(p.valeurActuelle)}</td>
-                  <td className="px-5 py-3.5 font-mono text-sm font-bold" style={{ color: pv >= 0 ? "#34d399" : "#f87171" }}>{pv >= 0 ? "+" : ""}{fmt(pv)}</td>
+                  <td className="px-5 py-3.5 font-mono text-sm font-bold" style={{ color: cr > 0 ? (pv >= 0 ? "#34d399" : "#f87171") : "var(--v-text-muted)" }}>{cr > 0 ? `${pv >= 0 ? "+" : ""}${fmt(pv)}` : "—"}</td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-bold" style={{ color: pct >= 0 ? "#34d399" : "#f87171" }}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</span>
+                      <span className="font-mono text-sm font-bold" style={{ color: pct == null ? "var(--v-text-muted)" : pct >= 0 ? "#34d399" : "#f87171" }}>{pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}</span>
                       <motion.button whileHover={{ scale: 1.1 }} title="Pleine page" onClick={(e) => { e.stopPropagation(); onOpenFullPage(p.id); }} className="w-7 h-7 rounded-lg vision-surface hover:bg-blue-500/20 flex items-center justify-center vision-text-muted hover:vision-info-text opacity-0 group-hover:opacity-100 transition-all"><Maximize2 size={11} /></motion.button>
                     </div>
                   </td>
@@ -1891,10 +1893,13 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
           </table>
         </div>
         <div className="md:hidden p-4 space-y-2">
-          {paging.pageItems.map(({ p, pv, pct, sci }) => (
+          {paging.pageItems.map(({ p, cr, pv, pct, sci }) => (
             <button key={p.id} type="button" onClick={() => onSelectProperty(p.id)} className="w-full flex items-center justify-between py-3 border-b border-[var(--v-border-subtle)] last:border-0 text-left hover:vision-surface px-1 rounded-lg transition-colors">
               <div className="min-w-0 mr-3"><p className="text-xs font-medium vision-text truncate">{p.address}</p><p className="text-xs vision-text-muted">{p.ville}</p><div className="mt-1"><SCIChip sci={sci} /></div></div>
-              <div className="text-right flex-shrink-0"><p className="text-sm font-bold font-mono" style={{ color: pv >= 0 ? "#34d399" : "#f87171" }}>{pv >= 0 ? "+" : ""}{fmt(pv)}</p><p className="text-xs font-mono" style={{ color: pct >= 0 ? "#34d399" : "#f87171" }}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</p></div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-sm font-bold font-mono" style={{ color: cr > 0 ? (pv >= 0 ? "#34d399" : "#f87171") : "var(--v-text-muted)" }}>{cr > 0 ? `${pv >= 0 ? "+" : ""}${fmt(pv)}` : "—"}</p>
+                <p className="text-xs font-mono" style={{ color: pct == null ? "var(--v-text-muted)" : pct >= 0 ? "#34d399" : "#f87171" }}>{pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}</p>
+              </div>
             </button>
           ))}
         </div>
