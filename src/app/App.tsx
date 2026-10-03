@@ -11,7 +11,8 @@ import {
   parseLocalDate,
   patchCreditField,
 } from "@/lib/loanCalculator";
-import { buildPatrimoineEvolution, patrimoineRangeLabel } from "@/lib/patrimoineEvolution";
+import { buildPatrimoineEvolution } from "@/lib/patrimoineEvolution";
+import { PatrimoineEvolutionChart } from "@/app/components/PatrimoineEvolutionChart";
 import { cashFlowMensuel, comptaMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
 import { computePortfolioYield, formatYieldPct } from "@/lib/propertyYield";
 import { api, isApiAvailable } from "@/lib/api";
@@ -632,23 +633,12 @@ function DashboardView({
           })}</div>
         </motion.div>
         <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.18 }} className={`${G} p-4 sm:p-5 xl:col-span-3 w-full min-w-0`}>
-          <p className={`${lbl} mb-0.5`}>Évolution du patrimoine</p>
-          <p className="text-xs vision-text-muted mb-4">{patrimoineRangeLabel(patrimoineSeries.fromYear, patrimoineSeries.toYear)}</p>
-          <ResponsiveContainer width="100%" height={188}>
-            <AreaChart data={patrimoineSeries.data} margin={{ top: 5, right: 5, left: -22, bottom: 0 }}>
-              <defs>
-                <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={0.22} /><stop offset="100%" stopColor="#60a5fa" stopOpacity={0} /></linearGradient>
-                <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={0.22} /><stop offset="100%" stopColor="#34d399" stopOpacity={0} /></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
-              <XAxis dataKey="an" tick={chartAxisTick} axisLine={false} tickLine={false} />
-              <YAxis tick={chartAxisTick} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}k`} />
-              <Tooltip content={<ChartTooltipContent unit="k" />} />
-              <Area type="monotone" dataKey="valeur" stroke="#60a5fa" strokeWidth={2} fill="url(#g1)" name="Valeur brute" />
-              <Area type="monotone" dataKey="dette" stroke="#f87171" strokeWidth={1.5} fill="none" strokeDasharray="5 3" name="Dette" />
-              <Area type="monotone" dataKey="net" stroke="#34d399" strokeWidth={2} fill="url(#g2)" name="Net" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <PatrimoineEvolutionChart
+            series={patrimoineSeries}
+            height={188}
+            gradientPrefix="dash-pe"
+            title="Évolution du patrimoine"
+          />
         </motion.div>
       </div>
       <motion.div variants={gridV} initial="hidden" animate="show" className={`${cardsGrid}`}>
@@ -1866,22 +1856,12 @@ function PatrimoineView({ properties, scis, onSelectProperty, onOpenFullPage }: 
             />
       </FiltersPanel>
       <motion.div variants={itemV} initial="hidden" animate="show" transition={{ delay: 0.15 }} className={`${G} p-5`}>
-        <p className={`${lbl} mb-4`}>Évolution du patrimoine · {patrimoineRangeLabel(patrimoineSeries.fromYear, patrimoineSeries.toYear)}</p>
-        <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={patrimoineSeries.data} margin={{ top: 5, right: 5, left: -18, bottom: 0 }}>
-            <defs>
-              <linearGradient id="pv2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={0.26} /><stop offset="100%" stopColor="#60a5fa" stopOpacity={0} /></linearGradient>
-              <linearGradient id="pn2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={0.26} /><stop offset="100%" stopColor="#34d399" stopOpacity={0} /></linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
-            <XAxis dataKey="an" tick={chartAxisTick} axisLine={false} tickLine={false} />
-            <YAxis tick={chartAxisTick} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}k`} />
-            <Tooltip content={<ChartTooltipContent unit="k" />} />
-            <Area type="monotone" dataKey="valeur" stroke="#60a5fa" strokeWidth={2.5} fill="url(#pv2)" name="Valeur brute" />
-            <Area type="monotone" dataKey="dette" stroke="#f87171" strokeWidth={1.5} fill="none" strokeDasharray="5 3" name="Dette" />
-            <Area type="monotone" dataKey="net" stroke="#34d399" strokeWidth={2.5} fill="url(#pn2)" name="Net" />
-          </AreaChart>
-        </ResponsiveContainer>
+        <PatrimoineEvolutionChart
+          series={patrimoineSeries}
+          height={240}
+          gradientPrefix="pat-pe"
+          title="Évolution du patrimoine"
+        />
       </motion.div>
 
       {items.length === 0 ? <FilterEmpty /> : null}
