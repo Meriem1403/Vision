@@ -25,7 +25,7 @@ import {
   TrendingUp, Bell, Plus, ArrowUpRight, ArrowDownRight, Pencil,
   Trash2, Check, X, ChevronLeft, Phone, Mail, MapPin, Calendar,
   Shield, Key, AlertTriangle, Euro, BarChart2, Menu, LayoutGrid,
-  List, Eye, ChevronDown, ChevronUp, Maximize2, Palette, LogOut, Banknote, Landmark,
+  List, Eye, ChevronDown, ChevronUp, Maximize2, Palette, LogOut, Banknote, Landmark, UserCog,
 } from "lucide-react";
 import { AppDetailDrawer, FullPageDetail, fullPageHeaderTitle, fullPageHeaderSubtitle } from "@/app/components/DetailLayer";
 import type { DetailTarget } from "@/app/detail";
@@ -34,6 +34,7 @@ import { BankDossierView } from "@/app/components/BankDossierView";
 import { BankPortalView } from "@/app/components/BankPortalView";
 import { BrandLogo } from "@/app/components/BrandLogo";
 import { ThemeSettings, ThemeSettingsModal } from "@/app/components/ThemeSettings";
+import { UsersAdminView } from "@/app/components/UsersAdminView";
 import { VisionPatrimoinePanel } from "@/app/components/VisionPatrimoine";
 import {
   pageWrap, formWrap, cardsGrid, G, GE, inp, lbl, btnP, btnG, btnD, btnS, selectCls,
@@ -1625,6 +1626,7 @@ const ALL_NAV: { id: View; label: string; Icon: typeof LayoutDashboard }[] = [
   { id: "comptabilite", label: "Comptabilité", Icon: FileText },
   { id: "patrimoine", label: "Patrimoine", Icon: TrendingUp },
   { id: "dossiers", label: "Dossiers banque", Icon: Banknote },
+  { id: "comptes", label: "Comptes", Icon: UserCog },
   { id: "portail-banque", label: "Portail banque", Icon: Landmark },
   { id: "alertes", label: "Alertes", Icon: Bell },
 ];
@@ -1651,6 +1653,7 @@ const APP_ROUTES = [
   "/comptabilite/:sciId",
   "/patrimoine",
   "/dossiers",
+  "/comptes",
   "/portail-banque",
   "/alertes",
   "/alertes/:id",
@@ -2443,6 +2446,13 @@ function VisionShell() {
                   entityOptions={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
                   properties={visibleProperties}
                   scis={visibleScis.map((s) => ({ id: s.id, shortName: s.shortName, valeurEstimee: s.valeurEstimee }))}
+                />
+              )}
+              {view === "comptes" && canAccessView(authUser, "comptes") && (
+                <UsersAdminView
+                  currentUser={authUser}
+                  scis={scis.map((s) => ({ id: s.id, shortName: s.shortName, associes: s.associes }))}
+                  properties={properties}
                 />
               )}
               {view === "portail-banque" && canAccessView(authUser, "portail-banque") && <BankPortalView user={authUser} loans={bankLoans} />}

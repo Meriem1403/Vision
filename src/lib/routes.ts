@@ -11,6 +11,7 @@ export const VIEW_PATHS: Record<View, string> = {
   alertes: "/alertes",
   dossiers: "/dossiers",
   "portail-banque": "/portail-banque",
+  comptes: "/comptes",
 };
 
 const PATH_TO_VIEW: Record<string, View> = Object.fromEntries(

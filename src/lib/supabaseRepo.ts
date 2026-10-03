@@ -64,20 +64,79 @@ function mapAuthError(message: string): Error {
   return new Error(message || "Connexion impossible.");
 }
 
+function mapProfileRow(data: Record<string, unknown>): AuthUser {
+  return {
+    id: String(data.id),
+    email: String(data.email),
+    name: String(data.name),
+    firstName: String(data.first_name),
+    initials: String(data.initials),
+    role: data.role as UserRole,
+    bankName: (data.bank_name as string | null) ?? null,
+    shareholderName: (data.shareholder_name as string | null) ?? null,
+    allowedViews: (data.allowed_views as string[] | null) ?? null,
+    allowedEntitySlugs: (data.allowed_entity_slugs as string[] | null) ?? null,
+  };
+}
+
 async function fetchProfile(userId: string): Promise<AuthUser> {
   const client = requireClient();
   const { data, error } = await client.from("profiles").select("*").eq("id", userId).single();
   if (error || !data) throw new Error(error?.message ?? "Profil introuvable");
-  return {
-    id: data.id,
-    email: data.email,
-    name: data.name,
-    firstName: data.first_name,
-    initials: data.initials,
-    role: data.role as UserRole,
-    bankName: data.bank_name,
-    shareholderName: data.shareholder_name,
+  return mapProfileRow(data as Record<string, unknown>);
+}
+
+export async function fetchAllProfiles(): Promise<AuthUser[]> {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapProfileRow(row as Record<string, unknown>));
+}
+
+export type ManageUserPayload = {
+  action: "create" | "update" | "delete";
+  userId?: string;
+  email?: string;
+  password?: string;
+  name?: string;
+  firstName?: string;
+  role?: "ASSOCIE" | "BANQUE";
+  bankName?: string | null;
+  shareholderName?: string | null;
+  allowedViews?: string[] | null;
+  allowedEntitySlugs?: string[] | null;
+};
+
+export async function manageUser(payload: ManageUserPayload): Promise<{ ok: boolean; userId?: string; email?: string }> {
+  const client = requireClient();
+  const { data, error } = await client.functions.invoke("manage-user", { body: payload });
+
+  const readErr = async (): Promise<string | null> => {
+    const ctx = (error as { context?: Response; message?: string } | null)?.context;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const body = (await ctx.clone().json()) as { error?: string };
+        if (body?.error) return body.error;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (data && typeof data === "object" && "error" in data) {
+      return String((data as { error: string }).error);
+    }
+    return error?.message ?? null;
   };
+
+  if (error) {
+    throw new Error((await readErr()) || "Action compte impossible. Vérifiez que la fonction manage-user est déployée.");
+  }
+  if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
+    throw new Error(String((data as { error: string }).error));
+  }
+  return data as { ok: boolean; userId?: string; email?: string };
 }
 
 export interface SciRow {

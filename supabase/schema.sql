@@ -16,6 +16,10 @@ create table profiles (
   role user_role not null,
   bank_name text,
   shareholder_name text,
+  /** Sous-ensemble des vues UI (null = défaut du rôle) */
+  allowed_views text[] null,
+  /** ASSOCIE : SCI autorisées par slug (null = toutes celles où il est actionnaire) */
+  allowed_entity_slugs text[] null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -175,8 +179,31 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_views text[];
+  v_slugs text[];
 begin
-  insert into public.profiles (id, email, name, first_name, initials, role, bank_name, shareholder_name)
+  begin
+    v_views := array(
+      select jsonb_array_elements_text(coalesce(new.raw_user_meta_data->'allowed_views', '[]'::jsonb))
+    );
+  exception when others then
+    v_views := null;
+  end;
+  begin
+    v_slugs := array(
+      select jsonb_array_elements_text(coalesce(new.raw_user_meta_data->'allowed_entity_slugs', '[]'::jsonb))
+    );
+  exception when others then
+    v_slugs := null;
+  end;
+  if v_views is not null and cardinality(v_views) = 0 then v_views := null; end if;
+  if v_slugs is not null and cardinality(v_slugs) = 0 then v_slugs := null; end if;
+
+  insert into public.profiles (
+    id, email, name, first_name, initials, role, bank_name, shareholder_name,
+    allowed_views, allowed_entity_slugs
+  )
   values (
     new.id,
     new.email,
@@ -185,7 +212,9 @@ begin
     coalesce(new.raw_user_meta_data->>'initials', upper(left(split_part(new.email, '@', 1), 2))),
     coalesce((new.raw_user_meta_data->>'role')::user_role, 'ASSOCIE'),
     nullif(new.raw_user_meta_data->>'bank_name', ''),
-    nullif(new.raw_user_meta_data->>'shareholder_name', '')
+    nullif(new.raw_user_meta_data->>'shareholder_name', ''),
+    v_views,
+    v_slugs
   );
   return new;
 end;

@@ -52,7 +52,13 @@ as $$
   select s.entity_id
   from shareholders s
   join profiles p on p.id = auth.uid() and p.role = 'ASSOCIE'
-  where lower(trim(s.name)) = lower(trim(coalesce(p.shareholder_name, p.name)));
+  join legal_entities e on e.id = s.entity_id
+  where lower(trim(s.name)) = lower(trim(coalesce(p.shareholder_name, p.name)))
+    and (
+      p.allowed_entity_slugs is null
+      or cardinality(p.allowed_entity_slugs) = 0
+      or e.slug = any (p.allowed_entity_slugs)
+    );
 $$;
 
 -- PROFILES

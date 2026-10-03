@@ -35,6 +35,10 @@ export function canManageData(user: AuthUser) {
   return user.role === "GERANT";
 }
 
+export function canManageUsers(user: AuthUser) {
+  return user.role === "GERANT";
+}
+
 export function normalizePerson(name: string) {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -44,9 +48,13 @@ export function entityAccessible(user: AuthUser, sci: SCI) {
   if (isAssocie(user)) {
     const candidates = [user.shareholderName, user.name].filter(Boolean) as string[];
     if (!candidates.length) return false;
-    return sci.associes.some((a) =>
+    const inShareholders = sci.associes.some((a) =>
       candidates.some((c) => normalizePerson(a.name) === normalizePerson(c)),
     );
+    if (!inShareholders) return false;
+    const slugs = user.allowedEntitySlugs?.filter(Boolean) ?? [];
+    if (slugs.length === 0) return true;
+    return slugs.includes(sci.id);
   }
   return false;
 }
@@ -100,13 +108,27 @@ export function normalizeBank(name: string) {
 }
 
 export const NAV_BY_ROLE: Record<AuthUser["role"], View[]> = {
-  GERANT: ["dashboard", "sci", "biens", "credits", "location", "comptabilite", "patrimoine", "dossiers", "alertes"],
+  GERANT: ["dashboard", "sci", "biens", "credits", "location", "comptabilite", "patrimoine", "dossiers", "comptes", "alertes"],
   ASSOCIE: ["dashboard", "sci", "biens", "credits", "patrimoine", "alertes"],
   BANQUE: ["portail-banque", "credits", "alertes"],
 };
 
+/** Vues configurables par le gérant pour un rôle donné (hors « comptes »). */
+export function configurableViewsForRole(role: AuthUser["role"]): View[] {
+  return NAV_BY_ROLE[role].filter((v) => v !== "comptes");
+}
+
 export function allowedViews(user: AuthUser): View[] {
-  return NAV_BY_ROLE[user.role];
+  const base = NAV_BY_ROLE[user.role];
+  const custom = (user.allowedViews ?? []).filter((v): v is View =>
+    base.includes(v as View),
+  );
+  if (custom.length === 0) return base;
+  // Le gérant garde toujours l’accès comptes
+  if (user.role === "GERANT" && !custom.includes("comptes")) {
+    return [...custom, "comptes"];
+  }
+  return custom;
 }
 
 export function canAccessView(user: AuthUser, view: View) {
@@ -124,4 +146,5 @@ export const PAGE_TITLES: Record<View, string> = {
   alertes: "Alertes",
   dossiers: "Dossiers bancaires",
   "portail-banque": "Portail banque",
+  comptes: "Comptes & accès",
 };
