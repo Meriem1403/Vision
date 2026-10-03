@@ -1,19 +1,17 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { getCrdAtDate, hasRateBasedAmortization, monthsBetween, projectFlatCrd } from "@/lib/loanCalculator";
+import { getCrdAtDate, hasRateBasedAmortization, monthsBetween, parseLocalDate, projectFlatCrd } from "@/lib/loanCalculator";
 import { pageWrap, pageEndSpacer, G } from "./layout";
 import { GSelect, monthOptions, buildYearOptions } from "./GSelect";
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 const fmtD = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(n);
 
-/** Dates de projection par défaut (sélecteurs Excel Vision patrimoine). */
-const DEFAULT_PROJECTION: Record<string, { month: number; year: number }> = {
-  beneduc: { month: 3, year: 2026 },
-  troika: { month: 10, year: 2025 },
-  lavista: { month: 10, year: 2025 },
-  rp: { month: 10, year: 2025 },
-};
+/** Mois / année courants — défaut des sélecteurs dashboard (suit la date du jour). */
+function currentProjection(): { month: number; year: number } {
+  const now = new Date();
+  return { month: now.getMonth() + 1, year: now.getFullYear() };
+}
 
 /** Date de début des tableaux d’amort Excel (1ʳᵉ échéance / CRD réf colonne E). */
 const AMORT_REF: Record<string, { month: number; year: number }> = {
@@ -87,12 +85,9 @@ function projectedCrd(credit: Credit, projection: Date, sciId: string): number {
   }
 
   // Excel Beneduc/Troika : CRD = CRD_réf − mensualité × mois écoulés
-  const amortRef = AMORT_REF[sciId] ?? DEFAULT_PROJECTION[sciId] ?? {
-    month: new Date().getMonth() + 1,
-    year: new Date().getFullYear(),
-  };
+  const amortRef = AMORT_REF[sciId] ?? currentProjection();
   const refDate = credit.debut
-    ? new Date(credit.debut)
+    ? parseLocalDate(credit.debut)
     : new Date(amortRef.year, amortRef.month - 1, 1);
 
   return projectFlatCrd({
@@ -169,11 +164,11 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
   onSelectProperty: (id: string) => void;
   shareholderName?: string | null;
 }) {
-  const defaults = DEFAULT_PROJECTION[sci.id] ?? { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
-  const [month, setMonth] = useState(defaults.month);
-  const [year, setYear] = useState(defaults.year);
+  const today = currentProjection();
+  const [month, setMonth] = useState(today.month);
+  const [year, setYear] = useState(today.year);
   const projection = new Date(year, month - 1, 1);
-  const amortRef = AMORT_REF[sci.id] ?? defaults;
+  const amortRef = AMORT_REF[sci.id] ?? today;
   const refDate = new Date(amortRef.year, amortRef.month - 1, 1);
 
   const startYears = properties
@@ -183,11 +178,11 @@ function EntityBlock({ sci, properties, onSelectProperty, shareholderName }: {
     .map((p) => (p.credit ? creditEndYear(p.credit) : null))
     .filter((y): y is number => y != null);
 
-  const minCreditYear = startYears.length ? Math.min(...startYears) : Math.min(refDate.getFullYear(), defaults.year);
-  const maxCreditYear = endYears.length ? Math.max(...endYears) : defaults.year;
+  const minCreditYear = startYears.length ? Math.min(...startYears) : Math.min(refDate.getFullYear(), today.year);
+  const maxCreditYear = endYears.length ? Math.max(...endYears) : today.year;
   const yearOpts = buildYearOptions(
-    Math.min(minCreditYear, refDate.getFullYear(), defaults.year, year),
-    Math.max(maxCreditYear, defaults.year, year),
+    Math.min(minCreditYear, refDate.getFullYear(), today.year, year),
+    Math.max(maxCreditYear, today.year, year),
   );
 
   const lines = properties.map((p) => {

@@ -8,6 +8,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
   addMonths,
   computeMonthlyPaymentExact,
+  finFromDebutDuree,
   getCrdAtDate,
   round2,
   toISODate,
@@ -255,7 +256,15 @@ export function parseTamText(text: string, existingBanks: string[] = []): TamImp
   const banque = detectBanque(text, existingBanks);
   if (!banque) warnings.push("Banque non détectée — à renseigner manuellement.");
 
-  const finCredit = toISODate(new Date(last.date.getFullYear(), last.date.getMonth(), 1));
+  // Fin = début + durée (pas la dernière ligne du PDF partiel, sinon durée/mensualité faussées)
+  const finCredit = finFromDebutDuree(inferred.debut, duree) ?? toISODate(new Date(last.date.getFullYear(), last.date.getMonth(), 1));
+
+  const lastPdfMonth = toISODate(new Date(last.date.getFullYear(), last.date.getMonth(), 1));
+  if (finCredit.slice(0, 7) !== lastPdfMonth.slice(0, 7)) {
+    warnings.push(
+      `Dernière échéance du PDF ${last.date.toLocaleDateString("fr-FR")} · fin calculée ${new Date(finCredit).toLocaleDateString("fr-FR")} (cohérente avec la mensualité banque).`,
+    );
+  }
 
   // Source label court
   let sourceLabel = "TAM banque";

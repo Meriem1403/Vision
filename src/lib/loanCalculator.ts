@@ -10,6 +10,19 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Parse une date ISO `YYYY-MM-DD` en date locale (évite le décalage UTC
+ * qui fait passer le 1er du mois au mois précédent en France).
+ */
+export function parseLocalDate(value: string | Date | null | undefined): Date {
+  if (value instanceof Date) return new Date(value.getTime());
+  const raw = String(value ?? "").trim();
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? new Date(NaN) : d;
+}
+
 /** Ajoute des mois en évitant les dérives JS (ex. 31 jan + 1 mois). */
 export function addMonths(date: Date, months: number): Date {
   const d = new Date(date.getTime());
@@ -42,7 +55,7 @@ function buildScheduleCore(input: LoanInput) {
   const mensualiteExact = computeMonthlyPaymentExact(input.montantInitial, input.tauxAnnuel, input.dureeMois);
   const mensualiteAffichee = round2(mensualiteExact);
   const tauxMensuel = input.tauxAnnuel / 100 / 12;
-  const debut = new Date(input.dateDebut);
+  const debut = parseLocalDate(input.dateDebut);
   let crd = input.montantInitial;
 
   const rows: Array<{
@@ -83,7 +96,7 @@ export function computeLoanSummary(input: LoanInput, projectionDate = new Date()
   const { rows, mensualiteAffichee, assurance, totalInterets } = buildScheduleCore(input);
   const target = new Date(projectionDate.getFullYear(), projectionDate.getMonth(), 1);
   const capitalRestant = getCrdAtDateFromRows(rows, input.montantInitial, target);
-  const finCredit = rows[rows.length - 1]?.periode ?? new Date(input.dateDebut);
+  const finCredit = rows[rows.length - 1]?.periode ?? parseLocalDate(input.dateDebut);
   const pctRembourse = input.montantInitial > 0
     ? round2(((input.montantInitial - capitalRestant) / input.montantInitial) * 100)
     : 0;
@@ -149,8 +162,8 @@ export function toISODate(d: Date): string {
 /** Durée en mois entre date de début et date de fin (1ers du mois). */
 export function dureeFromDebutFin(debut: string, fin: string): number {
   if (!debut || !fin) return 0;
-  const a = new Date(debut);
-  const b = new Date(fin);
+  const a = parseLocalDate(debut);
+  const b = parseLocalDate(fin);
   if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
   return Math.max(0, monthsBetween(a, b));
 }
@@ -158,7 +171,7 @@ export function dureeFromDebutFin(debut: string, fin: string): number {
 /** Date de fin = début + durée (mois). */
 export function finFromDebutDuree(debut: string, dureeMois: number): string | null {
   if (!debut || !dureeMois || dureeMois <= 0) return null;
-  const a = new Date(debut);
+  const a = parseLocalDate(debut);
   if (Number.isNaN(a.getTime())) return null;
   return toISODate(addMonths(new Date(a.getFullYear(), a.getMonth(), 1), dureeMois));
 }
@@ -293,7 +306,7 @@ export function enrichCredit(credit: {
   if (synced.debut && synced.mensualite && synced.montantInitial) {
     const capitalRestant = projectFlatCrd({
       capitalAtRef: synced.montantInitial,
-      refDate: new Date(synced.debut),
+      refDate: parseLocalDate(synced.debut),
       projectionDate: new Date(),
       mensualite: synced.mensualite,
     });
