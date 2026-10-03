@@ -14,7 +14,9 @@ import {
 import { AddressAutocomplete } from "@/app/components/AddressAutocomplete";
 import { BanqueField } from "@/app/components/BanqueField";
 import { FilterEmpty, FilterSelect, FiltersPanel, SearchBar, matchesSearch } from "@/app/components/ListFilters";
-import { PaginationBar, usePagination } from "@/app/components/Pagination";
+import { PaginationBar, useCardsGridPageSize, useDuoGridPageSize, usePagination } from "@/app/components/Pagination";
+import { TamPdfImportButton } from "@/app/components/TamPdfImport";
+import type { TamImportResult } from "@/lib/tamPdfImport";
 import { resolveBankName } from "@/lib/banks";
 import {
   AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar,
@@ -601,6 +603,21 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
   const [cred, setCred] = useState<Credit>(property?.credit ?? { banque: "", montantInitial: 0, taux: 0, duree: 0, mensualite: 0, debut: "", capitalRestant: 0, assuranceMensuelle: 0, finCredit: "" });
   const upd = (k: keyof Property, v: string | number) => setF((p) => ({ ...p, [k]: v }));
   const updC = (k: keyof Credit, v: string | number) => setCred((c) => patchCreditField(c, k, v));
+  const applyTamImport = (r: TamImportResult) => {
+    setHasCredit(true);
+    setCred((c) => enrichCredit({
+      ...c,
+      banque: r.banque || c.banque,
+      montantInitial: r.montantInitial,
+      taux: r.taux,
+      duree: r.duree,
+      debut: r.debut,
+      finCredit: r.finCredit,
+      assuranceMensuelle: r.assuranceMensuelle,
+      mensualite: r.mensualite,
+      capitalRestant: r.capitalRestant,
+    }));
+  };
   const enrichedCred = useMemo(() => enrichCredit(cred), [cred]);
   const sci = scis.find((s) => s.id === f.sciId);
   return (
@@ -656,6 +673,7 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
           </div>
           <span className="text-sm font-semibold vision-text">Crédit immobilier</span>
         </label>
+        <TamPdfImportButton existingBanks={existingBanks} onImported={applyTamImport} className="mb-4" />
         <AnimatePresence initial={false}>
           {hasCredit && (
             <motion.div
@@ -708,7 +726,8 @@ function BiensView({ properties, scis, onAdd, onUpdate, onDelete, onSelectProper
     const sci = sciOf(p, scis);
     return matchesSearch(query, p.address, p.ville, p.cp, p.type, sci.shortName, sci.name, p.credit?.banque);
   }), [properties, scis, filterSci, filterType, filterCredit, filterCash, query]);
-  const paging = usePagination(filtered, `${filterSci}-${filterType}-${filterCredit}-${filterCash}-${query}-${filtered.length}`);
+  const pageSize = useCardsGridPageSize();
+  const paging = usePagination(filtered, `${filterSci}-${filterType}-${filterCredit}-${filterCash}-${query}-${filtered.length}`, pageSize);
   const filtersActive = query !== "" || filterSci !== "all" || filterType !== "all" || filterCredit !== "all" || filterCash !== "all";
   const resetFilters = () => {
     setQuery("");
@@ -925,7 +944,8 @@ function SCIView({ scis, properties, onAdd, onUpdate, onDelete, onSelectSci, onO
     const assoc = s.associes.map((a) => a.name).join(" ");
     return matchesSearch(query, s.name, s.shortName, s.type, s.creation, assoc);
   }), [scis, filterType, query]);
-  const paging = usePagination(filtered, `${filterType}-${query}-${filtered.length}`);
+  const pageSize = useDuoGridPageSize();
+  const paging = usePagination(filtered, `${filterType}-${query}-${filtered.length}`, pageSize);
   const filtersActive = query !== "" || filterType !== "all";
   const resetFilters = () => { setQuery(""); setFilterType("all"); };
   if (mode !== "list") {
@@ -1017,6 +1037,20 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
     [properties],
   );
   const upd = (k: string, v: string | number) => setF((c) => patchCreditField(c, k, v));
+  const applyTamImport = (r: TamImportResult) => {
+    setF((c) => enrichCredit({
+      ...c,
+      banque: r.banque || c.banque,
+      montantInitial: r.montantInitial,
+      taux: r.taux,
+      duree: r.duree,
+      debut: r.debut,
+      finCredit: r.finCredit,
+      assuranceMensuelle: r.assuranceMensuelle,
+      mensualite: r.mensualite,
+      capitalRestant: r.capitalRestant,
+    }) as CreditEntry);
+  };
   const enriched = useMemo(() => enrichCredit(f) as CreditEntry, [f]);
   return (
     <motion.div variants={pageV} initial="hidden" animate="show" className={formWrap}>
@@ -1035,6 +1069,7 @@ function CreditFormView({ credit, properties, onSave, onBack, onDelete }: { cred
       <GSec title="Bien associé"><GS label="Bien" value={f.propertyId} onChange={(e) => upd("propertyId", e.target.value)} options={properties.map((p) => ({ value: p.id, label: `${p.address}, ${p.ville}` }))} /></GSec>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5 w-full">
       <GSec title="Prêt bancaire — saisie minimale">
+        <TamPdfImportButton existingBanks={existingBanks} onImported={applyTamImport} className="mb-4" />
         <p className="text-xs vision-text-muted mb-4">Renseignez montant, taux, date de début et date de fin. La durée et les mensualités se calculent automatiquement.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
           <BanqueField value={f.banque} onChange={(b) => upd("banque", b)} existingBanks={existingBanks} className="sm:col-span-2 xl:col-span-3" />
@@ -1094,7 +1129,8 @@ function CreditsView({ properties, scis, onUpdateProperty, onSelectCredit, onOpe
     await onUpdateProperty({ ...prop, credit: undefined });
     setConfirmDel(null);
   };
-  const paging = usePagination(filtered, `${filterSci}-${filterBanque}-${query}-${filtered.length}`);
+  const pageSize = useCardsGridPageSize();
+  const paging = usePagination(filtered, `${filterSci}-${filterBanque}-${query}-${filtered.length}`, pageSize);
   const filtersActive = query !== "" || filterSci !== "all" || filterBanque !== "all";
   const resetFilters = () => { setQuery(""); setFilterSci("all"); setFilterBanque("all"); };
   if (mode !== "list") {
@@ -1235,7 +1271,8 @@ function LocationView({ tenants, properties, scis, onAdd, onUpdate, onDelete, on
     const sci = prop ? sciOf(prop, scis) : null;
     return matchesSearch(query, t.nom, t.email, t.tel, t.statut, prop?.address, prop?.ville, sci?.shortName);
   }), [tenants, properties, scis, filterStatut, filterSci, query]);
-  const paging = usePagination(filtered, `${filterStatut}-${filterSci}-${query}-${filtered.length}`);
+  const pageSize = useCardsGridPageSize();
+  const paging = usePagination(filtered, `${filterStatut}-${filterSci}-${query}-${filtered.length}`, pageSize);
   const filtersActive = query !== "" || filterStatut !== "all" || filterSci !== "all";
   const resetFilters = () => { setQuery(""); setFilterStatut("all"); setFilterSci("all"); };
   if (mode !== "list") {
@@ -1346,7 +1383,8 @@ function ComptabiliteView({ properties, scis, onSelectSci, onOpenFullPage }: { p
   }), [scis, properties, query, filterResult]);
   const grandCF = properties.reduce((s, p) => s + cashFlow(p), 0);
   const barData = filteredScis.map((sci) => { const props = properties.filter((p) => p.sciId === sci.id); return { name: sci.shortName, revenus: props.reduce((s, p) => s + p.loyer, 0), charges: props.reduce((s, p) => s + (p.credit?.mensualite ?? 0) + p.taxeFonciere / 12 + p.assurance / 12, 0), fill: sci.color }; });
-  const paging = usePagination(filteredScis, `${query}-${filterResult}-${filteredScis.length}`);
+  const pageSize = useDuoGridPageSize();
+  const paging = usePagination(filteredScis, `${query}-${filterResult}-${filteredScis.length}`, pageSize);
   const filtersActive = query !== "" || filterResult !== "all";
   const resetFilters = () => { setQuery(""); setFilterResult("all"); };
   return (
