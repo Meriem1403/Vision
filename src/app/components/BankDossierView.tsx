@@ -10,6 +10,7 @@ import { getStoredToken } from "@/lib/auth";
 import { listBankOptions, resolveBankName } from "@/lib/banks";
 import { buildDossierPdfBlob, downloadBlob, slugFilename } from "@/lib/dossierPdf";
 import { cashFlowMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
+import { computePortfolioYield, coutRevientOf } from "@/lib/propertyYield";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { createDossier, deleteDossier, fetchDossier, fetchDossiers, sendDossier } from "@/lib/supabaseRepo";
 import { BanqueField } from "./BanqueField";
@@ -35,6 +36,9 @@ interface PropOpt {
   ville: string;
   type: string;
   valeurActuelle: number;
+  prixAchat?: number;
+  travaux?: number;
+  fraisNotaire?: number;
   loyer: number;
   taxeFonciere: number;
   assurance: number;
@@ -85,15 +89,21 @@ function buildPayload(
       dateGeneration: new Date().toISOString(),
       nombreEntites: ents.length,
       nombreBiens: props.length,
-      ...(opts.includePatrimoine && {
-        patrimoineBrut: totalValeur,
-        patrimoineNet: totalValeur - totalDette,
-        tauxEndettement: totalValeur > 0 ? Math.round((totalDette / totalValeur) * 1000) / 10 : 0,
-        rendementBrut: totalValeur > 0 ? Math.round((totalLoyers / totalValeur) * 10000) / 100 : 0,
-        rendementNet: totalValeur > 0
-          ? Math.round(((totalLoyers - props.reduce((s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12, 0)) / totalValeur) * 10000) / 100
-          : 0,
-      }),
+      ...(opts.includePatrimoine && (() => {
+        const chargesAnnuelles = props.reduce(
+          (s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12,
+          0,
+        );
+        const coutRevient = props.reduce((s, p) => s + coutRevientOf(p), 0);
+        const y = computePortfolioYield({ loyersAnnuels: totalLoyers, chargesAnnuelles, coutRevient });
+        return {
+          patrimoineBrut: totalValeur,
+          patrimoineNet: totalValeur - totalDette,
+          tauxEndettement: totalValeur > 0 ? Math.round((totalDette / totalValeur) * 1000) / 10 : 0,
+          rendementBrut: y.brut,
+          rendementNet: y.net,
+        };
+      })()),
       ...(opts.includeEndettement && {
         detteTotale: totalDette,
         mensualitesTotales: Math.round(totalMens * 100) / 100,

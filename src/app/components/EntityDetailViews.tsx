@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowDownRight, ArrowUpRight, Calendar, CreditCard, Key, Mai
 import { formatBailDate, leaseProgressPct } from "@/lib/bailDates";
 import { formatCreationDisplay } from "@/lib/creationDate";
 import { cashFlowMensuel, comptaMensuel, honorairesGestionMensuel } from "@/lib/propertyFinance";
-import { computePortfolioYield, computePropertyYield, formatYieldPct } from "@/lib/propertyYield";
+import { computePortfolioYield, computePropertyYield, coutRevientOf, formatYieldPct } from "@/lib/propertyYield";
 import { MetricLabel } from "./MetricWithFormula";
 import { pageWrap, fullPageToolbar, fullPageBtn, fullPageCard, metricsGridPage, tableScroll, mobileDetailCard, G, lbl } from "./layout";
 import type { AlertItem, Property, SCI, Tenant } from "./entityTypes";
@@ -115,10 +115,11 @@ export function SciDetailContent({ sci, properties, variant = "drawer" }: { sci:
     (s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12,
     0,
   );
+  const coutRevient = props.reduce((s, p) => s + coutRevientOf(p), 0);
   const yieldPct = computePortfolioYield({
     loyersAnnuels: loyers * 12,
     chargesAnnuelles,
-    patrimoineBrut: sci.valeurEstimee,
+    coutRevient,
   });
 
   return (

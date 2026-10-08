@@ -14,7 +14,7 @@ import {
 import { buildPatrimoineEvolution } from "@/lib/patrimoineEvolution";
 import { PatrimoineEvolutionChart } from "@/app/components/PatrimoineEvolutionChart";
 import { cashFlowMensuel, comptaMensuel, honorairesGestionMensuel, plusValueLatente } from "@/lib/propertyFinance";
-import { computePortfolioYield, formatYieldPct } from "@/lib/propertyYield";
+import { computePortfolioYield, coutRevientOf, formatYieldPct } from "@/lib/propertyYield";
 import { api, isApiAvailable } from "@/lib/api";
 import {
   detailPath, parseAppLocation, readSegment, viewPath, withSearch,
@@ -492,8 +492,13 @@ function DashboardView({
     (s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12,
     0,
   );
+  const coutRevientTotal = scopeProperties.reduce((s, p) => s + coutRevientOf(p), 0);
   const cf = scopeProperties.reduce((s, p) => s + cashFlow(p), 0);
-  const yieldPct = computePortfolioYield({ loyersAnnuels: loyers, chargesAnnuelles, patrimoineBrut: totalBrut });
+  const yieldPct = computePortfolioYield({
+    loyersAnnuels: loyers,
+    chargesAnnuelles,
+    coutRevient: coutRevientTotal,
+  });
 
   const personal = shareName && !isResidenceSegment
     ? investScis.reduce(
@@ -508,15 +513,17 @@ function DashboardView({
             (s, p) => s + (p.taxeFonciere || 0) + (p.assurance || 0) + honorairesGestionMensuel(p) * 12,
             0,
           );
+          const cout = props.reduce((s, p) => s + coutRevientOf(p), 0);
           acc.brut += sci.valeurEstimee * ratio;
           acc.dette += dette * ratio;
           acc.mensualites += mens * ratio;
           acc.cash += cash * ratio;
           acc.loyers += loy * ratio;
           acc.charges += charges * ratio;
+          acc.coutRevient += cout * ratio;
           return acc;
         },
-        { brut: 0, dette: 0, mensualites: 0, cash: 0, loyers: 0, charges: 0 },
+        { brut: 0, dette: 0, mensualites: 0, cash: 0, loyers: 0, charges: 0, coutRevient: 0 },
       )
     : null;
 
@@ -524,7 +531,7 @@ function DashboardView({
     ? computePortfolioYield({
         loyersAnnuels: personal.loyers,
         chargesAnnuelles: personal.charges,
-        patrimoineBrut: personal.brut,
+        coutRevient: personal.coutRevient,
       })
     : null;
 

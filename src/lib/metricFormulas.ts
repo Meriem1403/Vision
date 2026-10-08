@@ -4,17 +4,35 @@ export const METRIC_FORMULAS: Record<string, string> = {
   "Dette restante": "Somme des CRD des crédits d’investissement (hors résidence principale).",
   "Patrimoine net": "Patrimoine brut − Dette restante (investissement uniquement).",
   "Loyers annuels": "Σ (loyer mensuel × 12) des biens d’investissement (hors RP).",
-  "Cash-flow / mois": "Σ [Loyer − Mensualité crédit − Taxe foncière/12] sur l’investissement (hors RP).",
-  "Rendement brut": "(Loyers annuels ÷ Patrimoine brut) × 100 — investissement uniquement.",
-  "Rendement net": "((Loyers annuels − Taxe foncière − Assurance PNO) ÷ Patrimoine brut) × 100. Hors crédit, impôts et RP.",
+
+  "Cash-flow / mois":
+    "Σ [Loyer − Mensualité crédit − Taxe foncière÷12 − Honoraires gestion] (hors RP). La taxe est annuelle en base, d’où ÷12 pour un flux mensuel.",
+  "Cash-flow mensuel":
+    "Loyer − Mensualité crédit − Taxe foncière÷12 − Honoraires gestion (si déléguée). Taxe annuelle ÷ 12.",
+  "Cash-flow bien":
+    "Loyer − Mensualité crédit (hors ass. emprunteur) − Taxe foncière÷12 − Honoraires gestion.",
+  "Cash-flow":
+    "Σ cash-flow mensuel des biens : Loyer − Crédit − Taxe÷12 − Honoraires.",
+  "Cash mensuel total":
+    "Cash-flow mensuel agrégé (loyers − crédits − taxe÷12 − honoraires).",
+  "Ma part — cash/mois":
+    "Σ (cash-flow mensuel SCI × % de parts) — hors RP. Cash-flow = loyer − crédit − taxe÷12 − honoraires.",
+
+  "Rendement brut":
+    "(Loyers annuels ÷ Coût de revient) × 100. Coût = prix d’achat + travaux + frais de notaire. Indisponible si coût non saisi. Base annuelle : pas de ÷12.",
+  "Rendement net":
+    "((Loyers annuels − Taxe foncière annuelle − Assurance PNO annuelle − Honoraires gestion annuels) ÷ Coût de revient) × 100. La taxe foncière n’est PAS divisée par 12 ici (tout est annuel). Hors crédit et impôts.",
+  "Ma part — rdt brut":
+    "(Ma part loyers/an ÷ Ma part coût de revient) × 100. Coût = achat + travaux + notaire.",
+  "Ma part — rdt net":
+    "((Ma part loyers/an − taxe − PNO − honoraires, au prorata des parts) ÷ Ma part coût de revient) × 100. Charges en annuel (pas ÷12).",
+
   "Valeur actuelle": "Estimation de marché saisie pour le bien.",
   "Plus-value": "Valeur actuelle − (Prix d’achat + Travaux + Frais de notaire).",
   "Loyer mensuel": "Loyer hors charges, tel que saisi dans la fiche bien.",
-  "Cash-flow mensuel": "Loyer − Mensualité crédit − Taxe foncière/12 − Assurance/12.",
-  "Cash-flow bien": "Loyer − Mensualité crédit (hors assurance emprunteur) − Taxe foncière/12.",
-  "Taxe foncière / an": "Montant annuel de taxe foncière saisi pour le bien.",
+  "Taxe foncière / an": "Montant annuel de taxe foncière saisi pour le bien (utilisé tel quel en rendement ; ÷12 en cash-flow mensuel).",
   "Assurance / an": "Prime annuelle d’assurance du bien (PNO, etc.).",
-  "Coût total": "Prix d’achat + Travaux + Frais de notaire.",
+  "Coût total": "Prix d’achat + Travaux + Frais de notaire (= coût de revient).",
   "Prix d'achat": "Prix d’acquisition hors frais.",
   "Montant emprunté": "Capital initial emprunté à la banque.",
   "Capital restant": "CRD à la date du jour, calculé via le tableau d’amortissement.",
@@ -29,13 +47,14 @@ export const METRIC_FORMULAS: Record<string, string> = {
   "Taux": "Taux nominal annuel du crédit.",
   "Valeur estimée": "Estimation patrimoniale de l’entité (SCI ou RP).",
   "Loyers / mois": "Somme des loyers mensuels des biens rattachés à l’entité.",
-  "Cash-flow": "Σ cash-flow mensuel de tous les biens de l’entité.",
   Biens: "Nombre de biens immobiliers rattachés à l’entité.",
   Régime: "Régime fiscal de la structure (IR, IS ou RP).",
-  "Plus-value latente": "Valeur actuelle − Coût de revient (achat + travaux + notaire). Hors fiscalité et hors dette. Indisponible si le coût n’est pas saisi.",
+  "Plus-value latente":
+    "Valeur actuelle − Coût de revient (achat + travaux + notaire). Hors fiscalité et hors dette. Indisponible si le coût n’est pas saisi.",
   "Coût de revient": "Prix d’achat + Travaux + Frais de notaire.",
   "Gain %": "(Plus-value ÷ Coût de revient) × 100. Affiché seulement si le coût de revient est renseigné.",
-  "Résultat net consolidé mensuel": "Σ (Loyers − Mensualité crédit − Ass. emprunteur − Taxe/12 − PNO/12 − Honoraires gestion).",
+  "Résultat net consolidé mensuel":
+    "Σ (Loyers − Mensualité crédit − Ass. emprunteur − Taxe÷12 − PNO÷12 − Honoraires gestion).",
   "Loyers/mois": "Somme des loyers mensuels des locataires actifs.",
   Actifs: "Nombre de baux en cours ou à renouveler (hors terminés).",
   Impayés: "Nombre de locataires au statut « Impayé ».",
@@ -46,16 +65,17 @@ export const METRIC_FORMULAS: Record<string, string> = {
   "Ma part — dette": "Σ (CRD SCI × % de parts) — hors résidence principale.",
   "Ma part — net": "Ma part brut − Ma part dette.",
   "Ma part — loyers/an": "Σ (loyers annuels SCI × % de parts) — hors RP.",
-  "Ma part — cash/mois": "Σ (cash-flow mensuel SCI × % de parts) — hors RP.",
   "Ma part — mensualités": "Σ (mensualités crédit SCI × % de parts) — hors RP.",
-  "Ma part — rdt brut": "(Ma part loyers/an ÷ Ma part brut) × 100.",
-  "Ma part — rdt net": "((Ma part loyers/an − charges part) ÷ Ma part brut) × 100.",
-  "Cash mensuel total": "Cash-flow mensuel net agrégé (loyers − charges − crédits).",
   "Valeur": "Estimation de marché actuelle du bien.",
   "Loyer/mois": "Loyer mensuel hors charges.",
-  "Type": "Typologie et surface du bien (données saisies).",
+  Type: "Typologie et surface du bien (données saisies).",
   Mensualité: "Mensualité crédit calculée (hors assurance emprunteur).",
   "CRD projeté": "Capital restant dû total projeté à la date sélectionnée.",
+  "Honoraires / mois": "Loyer × % honoraires, si gestion locative déléguée.",
+  "Gestion locative": "Directe, ou déléguée avec un % d’honoraires sur le loyer.",
+  Lots: "Nombre de lots du bien.",
+  "Capital total": "Somme des CRD des crédits filtrés.",
+  "Mensualités/mois": "Somme des mensualités crédit des crédits filtrés.",
 };
 
 export function metricFormula(label: string): string | undefined {
