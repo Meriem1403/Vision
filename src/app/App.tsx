@@ -764,7 +764,14 @@ function PropertyForm({ property, scis, existingBanks = [], onSave, onBack, onDe
         <label className="flex items-center gap-3 cursor-pointer mb-1">
           <div
             className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors duration-200 ${f.gestionDeleguee ? "bg-blue-500/70" : "vision-surface-strong"}`}
-            onClick={() => upd("gestionDeleguee", !f.gestionDeleguee)}
+            onClick={() => {
+              const next = !f.gestionDeleguee;
+              setF((s) => ({
+                ...s,
+                gestionDeleguee: next,
+                honorairesGestionPct: next ? s.honorairesGestionPct : 0,
+              }));
+            }}
           >
             <motion.div animate={{ x: f.gestionDeleguee ? 22 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }} className="w-4 h-4 bg-white rounded-full absolute top-1 shadow" />
           </div>

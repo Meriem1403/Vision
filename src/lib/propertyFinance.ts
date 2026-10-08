@@ -19,25 +19,27 @@ export function honorairesGestionMensuel(p: PropertyFinanceInput): number {
 }
 
 /**
- * Cash-flow mensuel.
- * @param includeAssurance si true, déduit assurance PNO annuelle / 12 (défaut false pour rester aligné Excel).
+ * Cash-flow mensuel (formule métier) :
+ * Loyer − échéance crédit (mensualité + ass. emprunteur)
+ *      − taxe foncière÷12 − assurance PNO÷12 − honoraires gestion.
+ * Le 2ᵉ argument est ignoré (conservé pour les anciens appels).
  */
-export function cashFlowMensuel(p: PropertyFinanceInput, includeAssurance = false): number {
+export function cashFlowMensuel(p: PropertyFinanceInput, _includeAssurance = true): number {
   const mensCredit = p.credit?.mensualite ?? 0;
+  const assEmprunteur = p.credit?.assuranceMensuelle ?? 0;
   const taxeMois = (p.taxeFonciere || 0) / 12;
-  const assMois = includeAssurance ? (p.assurance || 0) / 12 : 0;
-  return Math.round(p.loyer - mensCredit - taxeMois - assMois - honorairesGestionMensuel(p));
+  const pnoMois = (p.assurance || 0) / 12;
+  const honoraires = honorairesGestionMensuel(p);
+  return Math.round((p.loyer || 0) - mensCredit - assEmprunteur - taxeMois - pnoMois - honoraires);
 }
 
 /**
- * Détail mensuel pour l’onglet Comptabilité :
- * loyers − (mensualité + ass. emprunteur) − taxe/12 − PNO/12 − honoraires gestion.
+ * Détail mensuel pour l’onglet Comptabilité — même formule que cashFlowMensuel.
  */
 export function comptaMensuel(p: PropertyFinanceInput) {
   const loyers = p.loyer || 0;
   const mensCredit = p.credit?.mensualite ?? 0;
   const assEmprunteur = p.credit?.assuranceMensuelle ?? 0;
-  /** Mensualité bancaire totale (crédit + assurance emprunteur). */
   const credits = mensCredit + assEmprunteur;
   const taxes = (p.taxeFonciere || 0) / 12;
   const assurances = (p.assurance || 0) / 12;

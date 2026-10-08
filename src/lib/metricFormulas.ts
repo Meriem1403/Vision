@@ -6,17 +6,17 @@ export const METRIC_FORMULAS: Record<string, string> = {
   "Loyers annuels": "Σ (loyer mensuel × 12) des biens d’investissement (hors RP).",
 
   "Cash-flow / mois":
-    "Σ [Loyer − Mensualité crédit − Taxe foncière÷12 − Honoraires gestion] (hors RP). La taxe est annuelle en base, d’où ÷12 pour un flux mensuel.",
+    "Σ [Loyer − Échéance crédit (mensualité + ass. emprunteur) − Taxe÷12 − Assurance PNO÷12 − Honoraires] (hors RP).",
   "Cash-flow mensuel":
-    "Loyer − Mensualité crédit − Taxe foncière÷12 − Honoraires gestion (si déléguée). Taxe annuelle ÷ 12.",
+    "Loyer − Échéance crédit (mensualité + ass. emprunteur) − Taxe foncière÷12 − Assurance÷12 − Honoraires gestion.",
   "Cash-flow bien":
-    "Loyer − Mensualité crédit (hors ass. emprunteur) − Taxe foncière÷12 − Honoraires gestion.",
+    "Loyer − Échéance crédit (mensualité + ass. emprunteur) − Taxe÷12 − Assurance÷12 − Honoraires.",
   "Cash-flow":
-    "Σ cash-flow mensuel des biens : Loyer − Crédit − Taxe÷12 − Honoraires.",
+    "Σ cash-flow mensuel : Loyer − Échéance − Taxe÷12 − Assurance÷12 − Honoraires.",
   "Cash mensuel total":
-    "Cash-flow mensuel agrégé (loyers − crédits − taxe÷12 − honoraires).",
+    "Cash-flow mensuel agrégé (même formule que Cash-flow mensuel).",
   "Ma part — cash/mois":
-    "Σ (cash-flow mensuel SCI × % de parts) — hors RP. Cash-flow = loyer − crédit − taxe÷12 − honoraires.",
+    "Σ (cash-flow mensuel SCI × % de parts) — hors RP. Même formule que Cash-flow mensuel.",
 
   "Rendement brut":
     "(Loyers annuels ÷ Coût de revient) × 100. Coût = prix d’achat + travaux + frais de notaire. Indisponible si coût non saisi. Base annuelle : pas de ÷12.",
@@ -31,7 +31,7 @@ export const METRIC_FORMULAS: Record<string, string> = {
   "Plus-value": "Valeur actuelle − (Prix d’achat + Travaux + Frais de notaire).",
   "Loyer mensuel": "Loyer hors charges, tel que saisi dans la fiche bien.",
   "Taxe foncière / an": "Montant annuel de taxe foncière saisi pour le bien (utilisé tel quel en rendement ; ÷12 en cash-flow mensuel).",
-  "Assurance / an": "Prime annuelle d’assurance du bien (PNO, etc.).",
+  "Assurance / an": "Prime annuelle d’assurance du bien (PNO, etc.) — déduite ÷12 dans le cash-flow mensuel.",
   "Coût total": "Prix d’achat + Travaux + Frais de notaire (= coût de revient).",
   "Prix d'achat": "Prix d’acquisition hors frais.",
   "Montant emprunté": "Capital initial emprunté à la banque.",

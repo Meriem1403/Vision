@@ -8,6 +8,7 @@ import {
   parseLocalDate,
   projectFlatCrd,
 } from "@/lib/loanCalculator";
+import { cashFlowMensuel } from "@/lib/propertyFinance";
 import { pageWrap, pageEndSpacer, G } from "./layout";
 import { GSelect, monthOptions, buildYearOptions } from "./GSelect";
 
@@ -59,10 +60,7 @@ interface SCI {
 }
 
 function excelCash(p: Property) {
-  const honoraires = p.gestionDeleguee && p.honorairesGestionPct
-    ? (p.loyer * p.honorairesGestionPct) / 100
-    : 0;
-  return Math.round(p.loyer - (p.credit?.mensualite ?? 0) - p.taxeFonciere / 12 - honoraires);
+  return cashFlowMensuel(p, false);
 }
 
 function finCreditLabel(c: Credit) {
