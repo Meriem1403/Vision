@@ -1,39 +1,19 @@
+# Vision Patrimoine
 
-  # Vision Patrimoine
+Suivi patrimonial immobilier : prêts, cash-flow, SCI et rendements.
 
-  Application de gestion patrimoniale immobilière avec calcul automatique des prêts bancaires.
+Les calculs couvrent la mensualité, le capital restant dû, les intérêts, les charges et la plus-value. Aucun dossier client n'est stocké dans ce dépôt.
 
-  ## Fonctionnalités
+## Stack
 
-  - Dashboard patrimonial (comme l'Excel de référence)
-  - Prêts bancaires : saisie minimale (montant, taux, durée, date) → mensualité, CRD, intérêts calculés automatiquement
-  - Cash-flow locatif par bien et par SCI
-  - Stack full-stack dockerisée
+- React, Vite
+- API Node.js, PostgreSQL
+- Docker Compose
 
-  ## Démarrage avec Docker
+## Démarrage
 
-  ```bash
-  docker compose up --build
-  ```
+```bash
+docker compose up --build
+```
 
-  | Service   | URL                        |
-  |-----------|----------------------------|
-  | Frontend  | http://localhost:5173      |
-  | Backend   | http://localhost:3001      |
-  | Mailpit   | http://localhost:8025      |
-  | PostgreSQL| localhost:5432             |
-
-  ## Développement local
-
-  ```bash
-  cp .env.example .env
-  cd backend && npm install && npm run db:push && npm run db:seed && npm run dev
-  pnpm install && pnpm dev
-  ```
-
-  ## Running the code (frontend seul)
-
-  Run `pnpm install` to install the dependencies.
-
-  Run `pnpm dev` to start the development server.
-  
+Le frontend, l'API et la base sont décrits dans `docker-compose.yml`.
